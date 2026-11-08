@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 3 of 6. One example is one demonstration of the exact behaviour: JSONL chat format, completion-only loss, label quality, duplicates and the 7 Banking77 test texts that also sit in train, how many examples (four answers, honestly compared), and a build-along that cleans and splits Larkline's routed history.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The training set: where a tune is won or lost - learn fine-tuning slm with phoebe">
+<meta property="og:description" content="Session 3 of 6. Format, leakage, duplicates and how many examples. The tune only learns what the set demonstrates, and the eval only means something if the held-out set stayed out.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/courses/03-building-the-training-set.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The training set: where a tune is won or lost - learn fine-tuning slm with phoebe">
+<meta name="twitter:description" content="Session 3 of 6. Chat-format JSONL, completion-only loss, a real leak in Banking77, and how many examples to start with.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 3 · The training set: where a tune is won or lost - learn fine-tuning slm with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-fine-tuning-slm-with-phoebe</a> / Session 3 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Fine-tuning and Small Language Models with Phoebe · Session 3 of 6</div>
+    <h1>The training set: where a tune is <span class="accent">won or lost</span></h1>
+    <p class="sub">The training run is the part everyone wants to talk about, and it is the part that matters least. A tune can only learn what the examples demonstrate, and an eval can only tell you the truth if the held-out rows never leaked into training. Tonight we write one example in the format the tools expect, see which tokens the model actually learns from, find a real leak in a well-known public dataset, compare four honest answers to "how many examples?", and clean and split Larkline's history so it is ready for session 4.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Builders with labelled history</span>
+      <span class="chip audience">Python and pandas</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Format, quality, how many</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: clean and split</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Constructed Larkline example. Session 1 ended with a HOLD: Larkline had no eval. Priya now has 18 months of claim notes, each with the queue an agent chose, and Tom has warned her that agents re-route about 1 in 20 notes later (a constructed figure). That history is the raw material for both the training set and the held-out set. Tonight Priya turns it into three files she can defend: one to train on, one to tune settings against, and one that stays frozen until session 5 scores the result. Larkline, Priya, Tom and every Larkline number are invented for teaching; the evidence behind each move is real and cited.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = do it yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> One correctly formatted training example, a plain-words answer to "which tokens does the model learn from?", a five-line pandas check for duplicates and test leakage you can run on any labelled set, an attributed answer to "how many examples?" that does not overclaim, and a frozen held-out file that session 5 will score against.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the format</span>
+      <h2>One example, one demonstration</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A training example is not a fact you want the model to know. It is one demonstration of the exact behaviour you want back: this kind of input, answered in exactly this way. The tools agree on the shape. OpenAI's supervised fine-tuning guide asks for JSONL, one complete JSON object per line, each with a <code>messages</code> array of chat turns. Hugging Face's TRL SFTTrainer accepts the same conversational shape, and it also decides which of those tokens the model is graded on.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 256" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One training example as a row of tokens. Eight prompt tokens on the left, the routing instruction and the claim note, are drawn pale: the model reads them but no loss is computed on them. Six completion tokens on the right, the JSON answer with queue Fraud and loss and urgent true, are highlighted: loss is computed on these tokens only, and only they push the weight update.">
+        <defs>
+          <filter id="f3aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="f3aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f3aH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f3aL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f3aS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f3aB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f3aA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f3aN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f3aH" x="30" y="26">COMPLETION-ONLY LOSS: THE MODEL READS EVERY TOKEN, BUT IS GRADED ON THE ANSWER ONLY</text>
+
+        <g filter="url(#f3aSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="84" width="50" height="40" rx="6" transform="rotate(-1 55 104)" fill="#FBF7DC"/>
+          <rect x="86" y="84" width="50" height="40" rx="6" transform="rotate(1 111 104)" fill="#FBF7DC"/>
+          <rect x="142" y="84" width="50" height="40" rx="6" transform="rotate(-0.8 167 104)" fill="#FBF7DC"/>
+          <rect x="198" y="84" width="50" height="40" rx="6" transform="rotate(1.2 223 104)" fill="#FBF7DC"/>
+          <rect x="254" y="84" width="50" height="40" rx="6" transform="rotate(-1 279 104)" fill="#FBF7DC"/>
+          <rect x="310" y="84" width="50" height="40" rx="6" transform="rotate(0.8 335 104)" fill="#FBF7DC"/>
+          <rect x="366" y="84" width="50" height="40" rx="6" transform="rotate(-1.2 391 104)" fill="#FBF7DC"/>
+          <rect x="422" y="84" width="50" height="40" rx="6" transform="rotate(1 447 104)" fill="#FBF7DC"/>
+          <rect x="494" y="84" width="56" height="40" rx="6" transform="rotate(-1 522 104)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="556" y="84" width="56" height="40" rx="6" transform="rotate(1 584 104)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="618" y="84" width="56" height="40" rx="6" transform="rotate(-0.8 646 104)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="680" y="84" width="56" height="40" rx="6" transform="rotate(1.2 708 104)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="742" y="84" width="56" height="40" rx="6" transform="rotate(-1 770 104)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="804" y="84" width="56" height="40" rx="6" transform="rotate(0.8 832 104)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M30 134 L30 140 L472 140 L472 134"/>
+          <path d="M494 134 L494 140 L860 140 L860 134"/>
+          <path d="M677 168 L677 182" marker-end="url(#f3aAr)"/>
+          <rect x="557" y="186" width="240" height="36" rx="8" transform="rotate(-0.5 677 204)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="f3aA" x="30" y="70">PROMPT · system + user turns</text>
+        <text class="f3aA" x="494" y="70">COMPLETION · assistant turn</text>
+        <text class="f3aS" x="55" y="108" text-anchor="middle">Route</text>
+        <text class="f3aS" x="111" y="108" text-anchor="middle">to</text>
+        <text class="f3aS" x="167" y="108" text-anchor="middle">a</text>
+        <text class="f3aS" x="223" y="108" text-anchor="middle">queue:</text>
+        <text class="f3aS" x="279" y="108" text-anchor="middle">phone</text>
+        <text class="f3aS" x="335" y="108" text-anchor="middle">stolen</text>
+        <text class="f3aS" x="391" y="108" text-anchor="middle">from</text>
+        <text class="f3aS" x="447" y="108" text-anchor="middle">car</text>
+        <text class="f3aB" x="522" y="108" text-anchor="middle">{queue:</text>
+        <text class="f3aB" x="584" y="108" text-anchor="middle">Fraud</text>
+        <text class="f3aB" x="646" y="108" text-anchor="middle">and</text>
+        <text class="f3aB" x="708" y="108" text-anchor="middle">loss,</text>
+        <text class="f3aB" x="770" y="108" text-anchor="middle">urgent:</text>
+        <text class="f3aB" x="832" y="108" text-anchor="middle">true}</text>
+        <text class="f3aS" x="251" y="160" text-anchor="middle">no loss: read as context, ignored by the gradient</text>
+        <text class="f3aS" x="677" y="160" text-anchor="middle">loss computed on these tokens only</text>
+        <text class="f3aL" x="677" y="209" text-anchor="middle">weight update</text>
+
+        <text class="f3aN" x="30" y="244">TRL default for prompt-completion data; for chat data set assistant_only_loss=True.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the answer tokens are the lesson; the prompt is the question the lesson is attached to</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The shape: JSONL in chat format<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Each line of the file is one complete conversation: a system message carrying the instruction you would otherwise put in the prompt, a user message carrying the input, and an assistant message carrying the exact output you want. One line, one example. No trailing commas, no array around the whole file. OpenAI's guide uses this <code>messages</code> layout, and TRL calls the same thing a conversational dataset.</p>
+        <div class="prompt-box good"><span class="label">★ One Larkline example (constructed), shown wrapped; on disk it is one line</span>{"messages": [
+  {"role": "system",
+   "content": "Route the claim note to one of six queues. Reply with JSON only: {\"queue\": ..., \"urgent\": true|false}"},
+  {"role": "user",
+   "content": "Phone stolen from my car last night, my bank card was in the case. Police report to follow."},
+  {"role": "assistant",
+   "content": "{\"queue\": \"Fraud and loss\", \"urgent\": true}"}
+]}</div>
+        <p>Notice what the assistant turn does not contain: no "Sure, here is the routing", no explanation. If the demonstrations are chatty, the tune will be chatty. Every example should be the answer you would accept in production, character for character.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Which tokens the model learns from<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>TRL's SFTTrainer accepts two families of data: language-modelling data (plain text, every token is a target) and prompt-completion data, each in a standard or a conversational form. For prompt-completion data, its docs say the loss is computed on the completion only by default. For conversational data you switch the same behaviour on with <code>assistant_only_loss=True</code>. In plain words: the model still reads the instruction and the claim note, but it is only corrected on the answer.</p>
+        <p>That matters for small sets. If the loss also covered the prompt, a large share of the training signal would go into reproducing your own system message hundreds of times. Completion-only loss spends the signal where the behaviour is. TRL docs v1.17.1, read 2026-11-08; re-verify the flag names against the version you install.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The vendor format outlives the vendor.</strong> OpenAI's guide defines the chat-format JSONL above, and the same guide, read on 2026-11-08, says the platform "is no longer accessible to new users". The file format did not stop being useful: the same <code>messages</code> layout loads straight into TRL as a conversational dataset. Write your set in the plain chat shape and it moves with you to whichever trainer you end up on.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers label quality, duplicates and leakage</span>
+      <h2>A clean set, checked on real numbers</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Three problems quietly ruin training sets. Wrong labels teach the wrong behaviour with full confidence. Duplicates give some examples extra weight for no reason. And leakage, the same text sitting in both the training set and the held-out set, makes the eval report memory as skill. None of them is hypothetical: a short script on Banking77, a widely used public intent dataset, finds both duplicates and leakage in its official splits.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 322" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two hatched piles. The train pile on the left holds 10,003 rows, imbalanced at 35 to 187 rows per intent, with four small tags inside marking texts that appear twice. The test pile on the right holds 3,080 rows, balanced at 40 per intent. Between them, a column of seven highlighted chips is tied by lines to both piles: seven test texts that also appear in train after lower-casing and collapsing whitespace.">
+        <defs>
+          <filter id="f3bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f3bHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .f3bH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f3bL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f3bS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f3bB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f3bA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f3bN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f3bH" x="30" y="26">BANKING77'S OFFICIAL SPLITS: 4 DUPLICATES INSIDE TRAIN, 7 TEXTS IN BOTH TRAIN AND TEST</text>
+
+        <g filter="url(#f3bSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="62" width="320" height="196" rx="12" transform="rotate(-0.5 200 160)" fill="url(#f3bHc)"/>
+          <rect x="520" y="62" width="320" height="196" rx="12" transform="rotate(0.5 680 160)" fill="url(#f3bHc)"/>
+          <rect x="60" y="206" width="64" height="26" rx="5" transform="rotate(-3 92 219)" fill="#FFFFFF"/>
+          <rect x="136" y="214" width="64" height="26" rx="5" transform="rotate(2 168 227)" fill="#FFFFFF"/>
+          <rect x="212" y="204" width="64" height="26" rx="5" transform="rotate(-2 244 217)" fill="#FFFFFF"/>
+          <rect x="288" y="214" width="56" height="26" rx="5" transform="rotate(3 316 227)" fill="#FFFFFF"/>
+          <rect x="400" y="78" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="400" y="102" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="400" y="126" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="400" y="150" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="400" y="174" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="400" y="198" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="400" y="222" width="80" height="18" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M362 87 L398 87 M482 87 L518 87"/>
+          <path d="M362 111 L398 111 M482 111 L518 111"/>
+          <path d="M362 135 L398 135 M482 135 L518 135"/>
+          <path d="M362 159 L398 159 M482 159 L518 159"/>
+          <path d="M362 183 L398 183 M482 183 L518 183"/>
+          <path d="M362 207 L398 207 M482 207 L518 207"/>
+          <path d="M362 231 L398 231 M482 231 L518 231"/>
+        </g>
+
+        <text class="f3bL" x="40" y="52">TRAIN · 10,003 rows</text>
+        <text class="f3bL" x="520" y="52">TEST · 3,080 rows</text>
+        <text class="f3bB" x="440" y="66" text-anchor="middle">7 in both</text>
+        <text class="f3bS" x="92" y="223" text-anchor="middle">twice</text>
+        <text class="f3bS" x="168" y="231" text-anchor="middle">twice</text>
+        <text class="f3bS" x="244" y="221" text-anchor="middle">twice</text>
+        <text class="f3bS" x="316" y="231" text-anchor="middle">twice</text>
+        <text class="f3bA" x="40" y="282">35 to 187 rows per intent: imbalanced</text>
+        <text class="f3bA" x="520" y="282">40 rows per intent: balanced</text>
+
+        <text class="f3bN" x="30" y="310">Casanueva et al. 2020, CC BY 4.0. Matched after lower-casing and collapsing whitespace, on the full splits.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - seven rows out of 3,080 is small, which is exactly why nobody notices them until a score looks too good</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Why a leaked test row inflates your eval<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A held-out set exists to answer one question: how does the model do on notes it has never seen? A row that sits in both sets breaks that promise for that row. The tuned model has been corrected on that exact text, so getting it right shows recall of a training example, not the routing skill you are trying to measure. Every leaked row nudges the score up, and the nudge is not spread evenly: it lands on whichever queues the leaked texts belong to.</p>
+        <p>The damage is worst exactly when you compare arms, which is what session 5 does. A big prompted model never saw your training file; the tuned small model did. Leakage helps only one side of the comparison, so it can turn a tie into a "win". The fix is cheap and mechanical: normalise, match, and remove the shared texts from training before you train. Never remove them from the held-out set to make the numbers look tidy; the held-out set is the one you froze.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Labels you can trust, and imbalance you can see<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Label quality.</strong> Constructed Larkline example: agents re-route about 1 in 20 notes later. If Priya trains on the first routing, roughly one demonstration in twenty teaches the wrong queue. Two moves help: use the final queue, not the first, and relabel a random sample to measure how often two careful people agree. The agreement number tells you the ceiling your eval can honestly report; a tune scored above human agreement is usually scoring the labelling style, not the task.</p>
+        <p><strong>Imbalance.</strong> Banking77's train split runs from 35 to 187 rows per intent, while its test split is balanced at 40 each. A model trained on that shape sees some intents five times as often as others, and a balanced test set will then expose the rare ones. Larkline's urgent queue is the rare one by nature. Keep the imbalance visible in a count table before you train, and score per queue, not just overall, in session 5.</p>
+        <p><strong>Duplicates.</strong> Four Banking77 train texts appear twice. That is harmless at this scale, but in a real support history, templated messages ("Please call me back") can repeat thousands of times and drown the rare cases. Drop exact duplicates after normalising, and look at the near-duplicates by eye.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A leak in a dataset everyone uses.</strong> Banking77 (Casanueva et al. 2020, arXiv:2003.04807, released by PolyAI under CC BY 4.0) has 10,003 training and 3,080 test examples over 77 intents. Running the normalise-and-match check on the full public splits finds 4 exact duplicate texts inside train and 7 test texts that also appear verbatim in train. Seven rows will not change a headline accuracy by much. The point is that the check took five lines, the dataset is carefully built and widely cited, and the leak was there anyway. Your own exported history, with copy-pasted templates and resubmitted claims, will usually have more.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers how many examples and synthetic data</span>
+      <h2>How many examples? Four answers, one honest method</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Ask five sources how many examples a fine-tune needs and you get five numbers spanning three orders of magnitude. They are not all wrong; they describe different tasks, different models and different definitions of "enough". Rather than pick a winner, line them up with their sources, then do the one thing none of them can do for you: measure your own curve on your own held-out set.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 414" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="An empty chart frame. The x-axis is the number of labelled examples on a log scale from 10 to 10,000. The y-axis reads your eval score: measure it, and no curve is plotted. Below the axis, four sourced answers are marked: OpenAI's guide, minimum 10 and improvements from 50-100; learn-hermes-ai session 94, 100-500 excellent examples; LIMA, 1,000 curated examples; learn-prompt-engineering, thousands of examples and a stable task. A highlighted box in the frame says your curve goes here: double the set, re-score the held-out set, plot it.">
+        <defs>
+          <filter id="f3cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f3cH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f3cL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f3cS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f3cB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f3cA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f3cN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f3cH" x="30" y="26">HOW MANY EXAMPLES? FOUR SOURCED ANSWERS ON ONE LOG AXIS, AND NO CURVE UNTIL YOU MEASURE</text>
+
+        <g filter="url(#f3cSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="80" y="44" width="750" height="196" rx="6" transform="rotate(-0.2 455 142)" fill="#FFFFFF"/>
+          <path d="M255 52 L255 232" stroke="#D6D0AE" stroke-dasharray="5 6"/>
+          <path d="M330 52 L330 232" stroke="#D6D0AE" stroke-dasharray="5 6"/>
+          <path d="M580 52 L580 232" stroke="#D6D0AE" stroke-dasharray="5 6"/>
+          <rect x="360" y="112" width="190" height="56" rx="8" transform="rotate(-0.6 455 140)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M80 240 L80 247 M330 240 L330 247 M580 240 L580 247 M830 240 L830 247"/>
+          <circle cx="80" cy="282" r="4" fill="#645F0C" stroke="#645F0C"/>
+          <path d="M255 276 L255 284 L330 284 L330 276"/>
+          <path d="M330 306 L330 314 L505 314 L505 306"/>
+          <circle cx="580" cy="342" r="4" fill="#645F0C" stroke="#645F0C"/>
+          <path d="M580 366 L580 374 L830 374 L830 366"/>
+        </g>
+
+        <text class="f3cA" x="64" y="142" text-anchor="middle" transform="rotate(-90 64 142)">your eval score: measure it</text>
+        <text class="f3cB" x="455" y="136" text-anchor="middle">your curve goes here</text>
+        <text class="f3cS" x="455" y="154" text-anchor="middle">double, re-score held-out, plot</text>
+        <text class="f3cS" x="80" y="260" text-anchor="middle">10</text>
+        <text class="f3cS" x="330" y="260" text-anchor="middle">100</text>
+        <text class="f3cS" x="580" y="260" text-anchor="middle">1,000</text>
+        <text class="f3cS" x="830" y="260" text-anchor="middle">10,000</text>
+        <text class="f3cL" x="92" y="286">min 10</text>
+        <text class="f3cL" x="338" y="288">OpenAI's guide: 50-100</text>
+        <text class="f3cL" x="513" y="318">learn-hermes-ai 94: 100-500</text>
+        <text class="f3cL" x="592" y="346">LIMA: 1,000 curated</text>
+        <text class="f3cL" x="572" y="378" text-anchor="end">learn-prompt-engineering: thousands</text>
+
+        <text class="f3cN" x="30" y="402">Bertsch et al. 2024: finetuning is more data hungry than in-context learning. Measure as you double.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - every mark is somebody's honest answer for their task; the empty frame is the only answer for yours</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The four answers, attributed<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>OpenAI's guide.</strong> A minimum of 10 examples; "We see improvements from fine-tuning on 50-100 examples"; "We recommend starting with 50 well-crafted demonstrations"; and "If 50 examples have no impact, rethink your task or prompt before adding training data." Read carefully, that is advice about where to start and when to stop, not a promise that 50-100 examples will be enough.</p>
+        <p><strong>LIMA (Zhou et al. 2023, arXiv:2305.11206).</strong> A strong general assistant from only 1,000 carefully curated prompts and responses, with the argument that almost all knowledge comes from pretraining. That is a general-purpose chat tune; the lesson is about curation, not about the number 1,000.</p>
+        <p><strong>Sibling paths.</strong> <a href="https://phoebefu6.github.io/learn-hermes-ai-with-phoebe/courses/94-fine-tune-your-own.html">Learn Hermes AI session 94 ↗</a> advises 100-500 excellent examples for a behaviour nudge. <a href="https://phoebefu6.github.io/learn-prompt-engineering-with-phoebe/courses/b2-core-techniques.html">Learn Prompt Engineering ↗</a> sets the bar at "thousands of examples and a stable task" before a tune beats a good prompt. <strong>Bertsch et al. 2024 (arXiv:2405.00200)</strong> add a measured caution: finetuning is more data hungry than in-context learning, though it can exceed long-context prompting with additional data.</p>
+        <p>The fair reading: the number depends on how narrow the task is, how good the base model already is, and how clean the labels are. Start small, double, re-score the frozen held-out set each time, and stop when the curve flattens.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Synthetic data: useful, with three known risks<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>When labelled history is thin, teams ask a big model to write extra examples. It can fill a rare queue, but it carries risks you should name before you use it:</p>
+        <ul>
+          <li><strong>The teacher's mistakes are copied in.</strong> If the big model misroutes a kind of note, every synthetic example of that kind teaches the small model the same mistake, with full confidence.</li>
+          <li><strong>Less variety than real notes.</strong> Generated text tends to be tidier and more uniform than what customers actually write: fewer typos, fewer half-sentences, fewer mixed-up claims. The tune then meets messier text in production than in training.</li>
+          <li><strong>Leakage by the back door.</strong> If any synthetic example was generated from a held-out item, or paraphrases one, the held-out set is no longer unseen. Generate only from training rows, and run the overlap check again afterwards.</li>
+        </ul>
+        <p>Keep synthetic rows tagged in their own column so you can train with and without them and compare on the held-out set. The held-out set itself stays real notes only.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The stop rule inside the vendor's own guide.</strong> The most quoted line from OpenAI's guide is the 50-100 range. The more useful line is the one after it: "If 50 examples have no impact, rethink your task or prompt before adding training data." Even the vendor that sold fine-tuning tells you that more data is not the default fix. A flat result at 50 is information about the task, and it is cheaper to learn at 50 than at 5,000.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Clean and split a labelled set</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya exports 18 months of routed notes and turns them into three files. Follow along on any labelled CSV you have: a text column and a label column are enough. The code is the real check; any counts from Larkline are constructed and your numbers will differ. The only real counts on this page are Banking77's, labelled as such.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 308" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A cleaning pipeline. Raw routed history, drawn as a hatched pile, flows through four steps in a row: normalise and drop exact duplicates, drop leaked rows, relabel a sample and measure agreement, and a stratified split with the same mix in each part. The split fans out into three files: train, written as JSONL in chat format; validation, used to pick epochs and settings; and the held-out set, highlighted and padlocked: frozen, never trained on.">
+        <defs>
+          <filter id="f3dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="83" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f3dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="f3dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f3dH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f3dL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f3dS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f3dB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f3dA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f3dN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f3dH" x="30" y="26">FROM RAW HISTORY TO THREE FILES: ONE OF THEM IS NEVER TOUCHED AGAIN</text>
+
+        <g filter="url(#f3dSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="70" width="120" height="64" rx="10" transform="rotate(-1.5 90 102)" fill="url(#f3dHc)"/>
+          <path d="M154 102 L176 102" marker-end="url(#f3dAr)"/>
+          <rect x="180" y="70" width="140" height="64" rx="10" transform="rotate(0.6 250 102)" fill="#FFFFFF"/>
+          <path d="M324 102 L346 102" marker-end="url(#f3dAr)"/>
+          <rect x="350" y="70" width="140" height="64" rx="10" transform="rotate(-0.6 420 102)" fill="#FFFFFF"/>
+          <path d="M494 102 L516 102" marker-end="url(#f3dAr)"/>
+          <rect x="520" y="70" width="140" height="64" rx="10" transform="rotate(0.6 590 102)" fill="#FFFFFF"/>
+          <path d="M664 102 L686 102" marker-end="url(#f3dAr)"/>
+          <rect x="690" y="70" width="160" height="64" rx="10" transform="rotate(-0.6 770 102)" fill="#FBF7DC"/>
+          <path d="M760 138 C700 176 320 168 262 204" marker-end="url(#f3dAr)"/>
+          <path d="M766 138 C720 170 520 172 472 204" marker-end="url(#f3dAr)"/>
+          <path d="M774 138 C770 160 720 180 712 204" marker-end="url(#f3dAr)"/>
+          <rect x="170" y="210" width="180" height="60" rx="10" transform="rotate(-0.8 260 240)" fill="#FFFFFF"/>
+          <rect x="380" y="210" width="180" height="60" rx="10" transform="rotate(0.8 470 240)" fill="#FFFFFF"/>
+          <rect x="600" y="210" width="220" height="60" rx="10" transform="rotate(-0.6 710 240)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="834" y="238" width="24" height="20" rx="3" transform="rotate(3 846 248)" fill="#FFFFFF"/>
+          <path d="M839 238 L839 231 C839 222 853 222 853 231 L853 238"/>
+        </g>
+
+        <text class="f3dA" x="30" y="58">raw routed history</text>
+        <text class="f3dS" x="30" y="152">18 months (constructed)</text>
+        <text class="f3dL" x="192" y="98">1 · normalise</text>
+        <text class="f3dS" x="192" y="116">drop exact dupes</text>
+        <text class="f3dL" x="362" y="98">2 · leak check</text>
+        <text class="f3dS" x="362" y="116">drop leaked rows</text>
+        <text class="f3dL" x="532" y="98">3 · relabel sample</text>
+        <text class="f3dS" x="532" y="116">measure agreement</text>
+        <text class="f3dL" x="702" y="98">4 · stratified split</text>
+        <text class="f3dS" x="702" y="116">same mix in each</text>
+        <text class="f3dL" x="184" y="236">train</text>
+        <text class="f3dS" x="184" y="254">5 · JSONL, chat format</text>
+        <text class="f3dL" x="394" y="236">validation</text>
+        <text class="f3dS" x="394" y="254">pick epochs and settings</text>
+        <text class="f3dB" x="614" y="236">HELD-OUT · frozen</text>
+        <text class="f3dS" x="614" y="254">6 · never trained on</text>
+
+        <text class="f3dN" x="30" y="296">Constructed Larkline example. OpenAI's guide gives no split ratio; the held-out set keeps the same diversity.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the padlocked file is the only one whose score you are allowed to believe</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Normalise the text and drop exact duplicates.</strong> Lower-case it, strip it, and collapse runs of whitespace, then keep one row per normalised text. Keep the original text for training; the normalised key is only for matching.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · normalise and dedupe</span>import pandas as pd
+
+def norm(s):
+    # lower-case, strip, collapse whitespace
+    return " ".join(str(s).lower().split())
+
+hist = pd.read_csv("routed_history.csv")  # text, final_queue
+hist["key"] = hist["text"].map(norm)
+
+before = len(hist)
+hist = hist.drop_duplicates(subset="key")
+print("dropped duplicates:", before - len(hist))
+# Larkline's count is constructed; your numbers will differ.
+# On Banking77's train split this finds 4.</div>
+      </div>
+      <div class="step">
+        <p><strong>Check test-against-train overlap and remove leaked rows from training.</strong> If you already have a held-out file (Larkline labelled one after session 1), match on the normalised key and drop the matches from the training side only.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · leak check</span>held = pd.read_csv("held_out.csv")
+held["key"] = held["text"].map(norm)
+
+leaked = hist["key"].isin(set(held["key"]))
+print("leaked rows:", leaked.sum())
+hist = hist[~leaked]   # remove from TRAINING, never from held-out
+# On Banking77's public splits this finds 7 test texts in train.
+# Your numbers will differ.</div>
+      </div>
+      <div class="step">
+        <p><strong>Relabel a random sample and measure agreement.</strong> Draw a random sample, hide the agent's queue, and have someone who knows the queues label it again. Agreement is matches divided by sample size. Use it as the honest ceiling for any score you report later, and read every disagreement: they show you which queue boundaries are fuzzy.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · relabel and agree</span>sample = hist.sample(n=200, random_state=20261108)
+sample[["text"]].to_csv("relabel_blind.csv", index=False)
+
+# after Tom's team fills in "relabel":
+#   agree = (sample["final_queue"] == relabelled["relabel"]).mean()
+# Agreement: ____ of 200   (fill in yours; no Larkline
+# result is printed here because none was measured)</div>
+      </div>
+      <div class="step">
+        <p><strong>Split train and validation, stratified by queue.</strong> Stratifying keeps the rare urgent queue present in every part. OpenAI's guide gives no fixed split ratio, only that the holdout should come from the same collected data with the same diversity; the 90/10 below is a starting choice, not a rule.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · stratified split</span>from sklearn.model_selection import train_test_split
+
+train, val = train_test_split(
+    hist, test_size=0.10,
+    stratify=hist["final_queue"], random_state=20261108)
+
+print(train["final_queue"].value_counts())
+print(val["final_queue"].value_counts())
+# check the urgent queue appears in both</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the JSONL in chat format.</strong> One line per example, the same system message on every line, the assistant turn exactly the output you want in production.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · write JSONL</span>import json
+
+SYSTEM = ("Route the claim note to one of six queues. "
+          "Reply with JSON only.")
+URGENT = {"Fraud and loss"}
+
+def write(df, path):
+    with open(path, "w") as f:
+        for t, q in zip(df["text"], df["final_queue"]):
+            answer = json.dumps({"queue": q, "urgent": q in URGENT})
+            row = {"messages": [
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": t},
+                {"role": "assistant", "content": answer}]}
+            f.write(json.dumps(row) + "\n")
+
+write(train, "train.jsonl")
+write(val, "val.jsonl")</div>
+      </div>
+      <div class="step">
+        <p><strong>Freeze the held-out set and never train on it.</strong> Record a fingerprint of the file so anyone can prove later that it did not change, and keep it somewhere the training script cannot read by accident.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · freeze</span>write(held, "held_out.jsonl")
+
+$ shasum -a 256 held_out.jsonl &gt; held_out.sha256
+$ chmod 444 held_out.jsonl
+
+Rule written in the README:
+  held_out.jsonl is scored in session 5 and never trained on,
+  never used to pick settings, never "topped up".</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Rerun steps 1 and 2 every time the data changes.</strong> New exports, synthetic rows and relabels all reintroduce duplicates and leaks. The check is cheap; a leak found after session 5 has already reported a score is not.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 4</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Run steps 1 and 2 on a labelled set you own</strong> and write down the duplicate and leak counts. If both are zero, check that your normalisation actually ran.</li>
+      <li><strong>Relabel 50 random rows yourself</strong> without looking at the original label, and compute agreement. Read every disagreement and name the boundary it sits on.</li>
+      <li><strong>Write five examples in chat-format JSONL</strong> for your task, and check that each assistant turn is exactly what you would accept in production, with no preamble.</li>
+      <li><strong>Write one paragraph for your team on "how many examples"</strong> that attributes each number to its source: OpenAI's guide, LIMA, and whichever sibling advice you follow, ending with how you will measure it.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and session 3 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · With completion-only loss, what is the model trained on?</p>
+      <button class="qopt" type="button">A · Every token in the example, prompt and answer alike</button>
+      <button class="qopt" type="button">B · It reads the prompt as context, but the loss is computed only on the answer tokens</button>
+      <button class="qopt" type="button">C · Only the system message, so the instruction is memorised</button>
+      <button class="qopt" type="button">D · Only the examples it already gets right</button>
+      <p class="qwhy">TRL's SFTTrainer computes the loss on the completion only by default for prompt-completion data, and <code>assistant_only_loss=True</code> does the same for conversational data. The prompt still shapes the answer; it just is not a target. A spends training signal reproducing your own instruction.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Seven Banking77 test texts also appear in its train split. Why does that matter if you fine-tune on train and score on test?</p>
+      <button class="qopt" type="button">A · It does not matter; seven rows are too few to count</button>
+      <button class="qopt" type="button">B · The test set should be deleted and rebuilt from scratch</button>
+      <button class="qopt" type="button">C · It means the dataset licence is invalid</button>
+      <button class="qopt" type="button">D · On those rows the tuned model is scored on text it was trained on, so the eval rewards recall and favours the tuned arm in a comparison</button>
+      <p class="qwhy">A leaked row measures memory, not the skill. The effect on one headline number may be small, but it only helps the model that saw the training file, which is the arm you are trying to judge fairly. Remove the shared texts from training and keep the held-out set as frozen.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · A colleague says "OpenAI says 50-100 examples is enough, so we will stop at 100." What is the fair reading?</p>
+      <button class="qopt" type="button">A · OpenAI's guide says it sees improvements from 50-100 and recommends starting with 50; it is a starting point, so measure on your held-out set as you double</button>
+      <button class="qopt" type="button">B · OpenAI's guide guarantees production quality at 100 examples</button>
+      <button class="qopt" type="button">C · LIMA proved 1,000 is always the right number, so OpenAI is wrong</button>
+      <button class="qopt" type="button">D · The number does not matter as long as the training loss goes down</button>
+      <p class="qwhy">OpenAI's guide frames 50-100 as where improvements show up and 50 as where to start, and adds that if 50 examples have no impact you should rethink the task or prompt. LIMA, sibling advice and Bertsch et al. 2024 point higher for other tasks. Your own curve on a frozen held-out set settles it for yours.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">OpenAI supervised fine-tuning guide</span><span class="note">JSONL chat format with a messages array; minimum 10, "50-100 examples", start with 50, the stop rule at 50; holdout from the same data with the same diversity and no fixed ratio; read at source 2026-11-08, re-verify before delivery</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Hugging Face TRL SFTTrainer docs (v1.17.1)</span><span class="note">Language-modelling and prompt-completion datasets, standard or conversational; completion-only loss by default for prompt-completion; assistant_only_loss=True for conversational; read 2026-11-08, re-verify</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Banking77 (Casanueva et al. 2020, arXiv:2003.04807, CC BY 4.0) and computed facts</span><span class="note">10,003 train and 3,080 test rows; 4 duplicate texts in train; 7 test texts also in train after normalising; 35 to 187 rows per intent in train, 40 each in test; computed on the full public splits</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Zhou et al. 2023 (LIMA); Bertsch et al. 2024</span><span class="note">1,000 curated examples; finetuning is more data hungry than in-context learning but can exceed it with more data. Abstracts read at source</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Learn Hermes AI session 94; Learn Prompt Engineering</span><span class="note">Sibling advice quoted as each path states it: 100-500 excellent examples; "thousands of examples and a stable task"</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Larkline, Priya, Tom and every Larkline number</span><span class="note">Constructed for teaching, including the 1 in 20 re-routing rate; no Larkline count is a measurement</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 3 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>One line, one demonstration</b><span>JSONL, a messages array, the assistant turn exactly as you want it in production.</span></div>
+      <div class="cheat-item"><b>Graded on the answer</b><span>Completion-only loss: the prompt is read, only the answer tokens are targets.</span></div>
+      <div class="cheat-item"><b>Normalise, then match</b><span>Lower-case, strip, collapse whitespace; drop duplicates; remove leaked rows from training.</span></div>
+      <div class="cheat-item"><b>Leaks are normal</b><span>Banking77 has 7 test texts in train. Check every set, every time it changes.</span></div>
+      <div class="cheat-item"><b>How many examples</b><span>OpenAI's guide: start with 50, improvements from 50-100. Others say more. Measure as you double.</span></div>
+      <div class="cheat-item"><b>Freeze the held-out set</b><span>Stratified, same diversity, fingerprinted, never trained on, never used to pick settings.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Priya has a clean train.jsonl, a val.jsonl and a frozen held-out file. Session 4 opens the training run itself: what LoRA and QLoRA actually change, what rank and alpha mean, and how much GPU memory the tune will need, without the maths fear.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Session 3 of 6 · learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="02-small-models-trade-offs.html">← Prev: Small language models</a> &nbsp;·&nbsp; <a href="04-lora-and-qlora.html">Next: LoRA and QLoRA →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

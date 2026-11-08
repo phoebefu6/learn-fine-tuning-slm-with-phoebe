@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 2 of 6. What a 3-4 billion parameter model gives up and gets back: parameters and factual capacity, context length, open weights against open source, bytes per parameter and weights-only memory, and where the model can run. Build-along: compare three real model cards for Larkline's claim-triage task.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Small language models: what you give up, what you get back - learn fine-tuning slm with phoebe">
+<meta property="og:description" content="Session 2 of 6. Read three small-model cards like a builder: parameters, context, licence, memory at 16-bit and 4-bit, and what the card says about facts.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/courses/02-small-models-trade-offs.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Small language models: what you give up, what you get back - learn fine-tuning slm with phoebe">
+<meta name="twitter:description" content="Session 2 of 6. Parameters, context, licences, quantisation and three model cards compared.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 2 · Small language models: what you give up, what you get back - learn fine-tuning slm with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-fine-tuning-slm-with-phoebe</a> / Session 2 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Fine-tuning and Small Language Models with Phoebe · Session 2 of 6</div>
+    <h1>Small language models: what you give up, <span class="accent">what you get back</span></h1>
+    <p class="sub">A small model is not a big model with the quality turned down. It is a different bargain: fewer parameters, so less room for facts and less general range, in exchange for a weight file you can hold on one modest GPU, run inside your own account, and tune for one narrow job. Tonight we read three real model cards the way a builder should, field by field: parameters, context, licence, memory, and the one sentence on a card that tells you which job to give the model.</p>
+    <div class="chip-row">
+      <span class="chip level">🟡 Core</span>
+      <span class="chip audience">Builders choosing a base model</span>
+      <span class="chip audience">No GPU needed</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Size, licence, memory</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: compare three cards</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Constructed Larkline example. Session 1 ended with Priya's scorecard: claim triage is a behaviour task, the six queues are stable, the volume is high, and the one HOLD is the missing eval. While the held-out set is being labelled, Tom asks the obvious next question: "If we do tune, which model?" Priya has three candidates in the 3-4 billion parameter class, all with public model cards on Hugging Face. Larkline, Priya, Tom and every Larkline number are invented for teaching; every model fact on this page comes from the cards themselves, read on 2026-11-08.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = do it yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A dated comparison table of three small-model cards, the weights-only memory of each at 16-bit and 4-bit worked out by hand, a clear line between open weights and open source, and a one-paragraph shortlist with a reason you could defend to your legal team and your platform team.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers parameters and context</span>
+      <h2>What "small" buys, and what it costs</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">"Small" here means roughly 3 to 4 billion parameters: Meta's Llama 3.2 3B Instruct at 3.21B, Microsoft's Phi-4-mini-instruct at 3.8B, and Qwen3-4B at 4.0B. Parameters are where a model stores what it learned in pretraining, so fewer of them means less room for facts. The second number on every card is context length: how much text the model can read in one request. Read the two together, and read the footnotes, because the context figure can change with the variant you actually deploy.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 392" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Three model cards drawn side by side with the same four fields. Llama 3.2 3B Instruct: 3.21B parameters, 128k context, but its quantized variants have 8k context, highlighted; licence Llama 3.2 Community License, open weights, not OSI open source; data cutoff December 2023. Qwen3-4B: 4.0B parameters, 3.6B non-embedding; 32,768 context natively, 131,072 with YaRN; Apache 2.0; data cutoff not in our read of the card. Phi-4-mini-instruct: 3.8B parameters; 128K context; MIT; data cutoff June 2024.">
+        <defs>
+          <filter id="f2aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="52" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f2aH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f2aL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f2aS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f2aB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f2aV { font: 800 18px Inter, sans-serif; fill: #3F3C06; }
+          .f2aA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f2aN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f2aH" x="30" y="26">THREE CARDS, SAME FOUR FIELDS: READ ACROSS, NOT DOWN</text>
+
+        <g filter="url(#f2aSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="46" width="260" height="306" rx="10" transform="rotate(-0.5 160 199)" fill="#FFFFFF"/>
+          <rect x="310" y="46" width="260" height="306" rx="10" transform="rotate(0.4 440 199)" fill="#FFFFFF"/>
+          <rect x="590" y="46" width="260" height="306" rx="10" transform="rotate(-0.4 720 199)" fill="#FFFFFF"/>
+          <rect x="44" y="204" width="232" height="26" rx="6" fill="#FFF5C4" stroke="#1F4A7C"/>
+        </g>
+
+        <text class="f2aH" x="44" y="72">Llama 3.2 3B Instruct</text>
+        <text class="f2aS" x="44" y="90">meta-llama · released Sept 25, 2024</text>
+        <text class="f2aA" x="44" y="118">PARAMETERS</text>
+        <text class="f2aV" x="44" y="142">3.21B</text>
+        <text class="f2aA" x="44" y="172">CONTEXT</text>
+        <text class="f2aV" x="44" y="196">128k</text>
+        <text class="f2aB" x="54" y="221">quantized variants: 8k context</text>
+        <text class="f2aA" x="44" y="256">LICENCE</text>
+        <text class="f2aL" x="44" y="276">Llama 3.2 Community License</text>
+        <text class="f2aS" x="44" y="294">open weights, not OSI open source</text>
+        <text class="f2aA" x="44" y="320">DATA CUTOFF</text>
+        <text class="f2aL" x="44" y="340">December 2023 (pretraining)</text>
+
+        <text class="f2aH" x="324" y="72">Qwen3-4B</text>
+        <text class="f2aS" x="324" y="90">Qwen · thinking mode on by default</text>
+        <text class="f2aA" x="324" y="118">PARAMETERS</text>
+        <text class="f2aV" x="324" y="142">4.0B</text>
+        <text class="f2aS" x="380" y="142">3.6B non-embedding</text>
+        <text class="f2aA" x="324" y="172">CONTEXT</text>
+        <text class="f2aV" x="324" y="196">32,768</text>
+        <text class="f2aS" x="324" y="221">131,072 with YaRN</text>
+        <text class="f2aA" x="324" y="256">LICENCE</text>
+        <text class="f2aL" x="324" y="276">Apache 2.0</text>
+        <text class="f2aS" x="324" y="294">an OSI open-source licence</text>
+        <text class="f2aA" x="324" y="320">DATA CUTOFF</text>
+        <text class="f2aS" x="324" y="340">not in our read: check the card</text>
+
+        <text class="f2aH" x="604" y="72">Phi-4-mini-instruct</text>
+        <text class="f2aS" x="604" y="90">microsoft · February 2025</text>
+        <text class="f2aA" x="604" y="118">PARAMETERS</text>
+        <text class="f2aV" x="604" y="142">3.8B</text>
+        <text class="f2aA" x="604" y="172">CONTEXT</text>
+        <text class="f2aV" x="604" y="196">128K</text>
+        <text class="f2aA" x="604" y="256">LICENCE</text>
+        <text class="f2aL" x="604" y="276">MIT</text>
+        <text class="f2aS" x="604" y="294">an OSI open-source licence</text>
+        <text class="f2aA" x="604" y="320">DATA CUTOFF</text>
+        <text class="f2aL" x="604" y="340">June 2024</text>
+
+        <text class="f2aN" x="30" y="376">All values from the Hugging Face model cards, read 2026-11-08. Cards change: re-read before you decide.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the headline context number belongs to the full model; the variant you deploy may read far less</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>What the parameter count buys<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A parameter count is a capacity budget. Pretraining spends it on grammar, reasoning patterns, style and a great many facts. Shrink the budget and something has to give, and the thing that gives first is breadth of factual recall. That is not a rumour about small models: Microsoft's own card for Phi-4-mini-instruct says the model "simply does not have the capacity to store too much factual knowledge", and suggests pairing it with a search engine.</p>
+        <p>For a fine-tuning project that is good news, not bad. Session 1 already sent facts to retrieval and behaviour to the weights. A small model is a reasonable home for a narrow behaviour, such as putting a claim note into one of six queues, precisely because that job needs consistency, not encyclopaedic recall. If the job needs facts, the retrieval side is taught in <a href="https://phoebefu6.github.io/learn-rag-with-phoebe/courses/a1-what-rag-is.html">Learn RAG with Phoebe ↗</a>.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Context length, and the footnotes that move it<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>All three cards quote generous context lengths, but read how each one gets there. Llama 3.2 3B Instruct supports 128k, and its quantized variants support 8k. Qwen3-4B reads 32,768 tokens natively and 131,072 with YaRN, a technique for stretching the position encoding beyond the native window. Phi-4-mini-instruct lists 128K. Three different stories behind three numbers that look alike.</p>
+        <p>The working question is not "which is longest?" but "how long is my input, in the variant I will actually serve?". A Larkline claim note with its instructions is a few hundred tokens (constructed). Any of the three fits with room to spare, even Llama's 8k quantized variant. A contract-review task would be a different conversation.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The other fields worth copying down<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Beyond size and context, each card carries details that matter once you deploy. Llama 3.2's card lists 8 officially supported languages and a pretraining data cutoff of December 2023. Phi-4-mini-instruct lists 23 languages, a data cutoff of June 2024 and a vocabulary of 200,064 tokens. Qwen3-4B's card describes 36 layers, grouped-query attention with 32 query heads and 8 key-value heads, and a thinking mode that is on by default, with a non-thinking mode available.</p>
+        <p>That last detail has a cost consequence: a model that reasons out loud before answering produces more output tokens per request. For a one-label routing answer you would test the non-thinking mode, and measure the difference on your own eval rather than assume it.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>A card that tells you the job.</strong> Phi-4-mini-instruct is a 3.8-billion-parameter model whose own card warns about its factual capacity and points you to search. That one sentence is worth more than any leaderboard row when you choose a base model: the people who trained it are telling you to give it behaviour from the weights and facts from retrieval.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers licences</span>
+      <h2>Open weights are not open source</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">All three models let you download the weights. That makes them open-weight models. Whether they are open source is a separate question, answered by the licence. Qwen3-4B ships under Apache 2.0 and Phi-4-mini-instruct under MIT, both licences approved by the Open Source Initiative. Llama 3.2 ships under the Llama 3.2 Community License, Meta's own licence: open weights, but not an OSI open-source licence. Which one you hold decides who in your company has to read what before you ship.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 332" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A decision tree. Start: which licence is on the card? Branch one: Apache 2.0 or MIT, Qwen3-4B and Phi-4-mini, OSI open source; use, modify and redistribute are allowed as the open-source definition requires; conditions are in the text, read them. Branch two, highlighted: Llama 3.2 Community License, Llama 3.2 3B Instruct, open weights with its own terms; not an OSI licence, its own clauses decide; answer ship commercially, modify and redistribute from the licence text.">
+        <defs>
+          <filter id="f2bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="64" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="f2bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f2bH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f2bL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f2bS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f2bB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f2bA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f2bN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f2bH" x="30" y="26">ONE QUESTION SPLITS THE PATH: WHOSE TERMS ARE YOU READING?</text>
+
+        <g filter="url(#f2bSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="24" y="140" width="130" height="70" rx="10" transform="rotate(-1.2 89 175)" fill="#FBF7DC"/>
+          <rect x="190" y="80" width="180" height="84" rx="10" transform="rotate(0.6 280 122)" fill="#FFFFFF"/>
+          <rect x="390" y="80" width="472" height="84" rx="10" transform="rotate(-0.3 626 122)" fill="#FFFFFF"/>
+          <rect x="190" y="200" width="180" height="84" rx="10" transform="rotate(-0.6 280 242)" fill="#FFFFFF"/>
+          <rect x="390" y="200" width="472" height="84" rx="10" transform="rotate(0.3 626 242)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M156 166 C170 140 172 124 186 122" marker-end="url(#f2bAr)"/>
+          <path d="M156 186 C170 212 172 240 186 242" marker-end="url(#f2bAr)"/>
+          <path d="M372 122 L386 122" marker-end="url(#f2bAr)"/>
+          <path d="M372 242 L386 242" marker-end="url(#f2bAr)"/>
+        </g>
+
+        <text class="f2bL" x="89" y="170" text-anchor="middle">Which licence</text>
+        <text class="f2bL" x="89" y="188" text-anchor="middle">is on the card?</text>
+
+        <text class="f2bL" x="204" y="110">Apache 2.0 · MIT</text>
+        <text class="f2bS" x="204" y="128">Qwen3-4B · Phi-4-mini</text>
+        <text class="f2bA" x="204" y="150">OSI open source</text>
+        <text class="f2bL" x="404" y="108">Use, modify and redistribute: allowed</text>
+        <text class="f2bS" x="404" y="128">as the open-source definition requires of any OSI-approved licence.</text>
+        <text class="f2bS" x="404" y="146">Conditions still live in the text: read them before you ship.</text>
+
+        <text class="f2bL" x="204" y="230">Llama 3.2 Community</text>
+        <text class="f2bL" x="204" y="246">License</text>
+        <text class="f2bA" x="204" y="270">open weights, own terms</text>
+        <text class="f2bB" x="404" y="228">Not an OSI open-source licence: its own clauses decide.</text>
+        <text class="f2bS" x="404" y="248">Ship commercially? Modify? Redistribute? Answer each from the text.</text>
+        <text class="f2bS" x="404" y="266">Weights you can download are not the same as open source.</text>
+
+        <text class="f2bN" x="30" y="316">Licence names from the model cards, read 2026-11-08. Read the licence text yourself; this is not legal advice.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - "I can download it" answers one question; the licence answers the three your company will ask</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The vocabulary, said precisely<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Open weights</strong> means the trained parameters are published and you can download and run them. It says nothing about what you may do next. <strong>Open source</strong>, in the sense the Open Source Initiative defines, is a property of the licence: the licence must allow anyone to use, study, modify and redistribute the work, without discriminating against a field of use. Apache 2.0 and MIT are on the OSI's approved list. The Llama 3.2 Community License is not; Meta wrote it, and its clauses are its own.</p>
+        <p>The practical consequence is about effort, not good and bad. A team using an Apache 2.0 or MIT model can lean on licences its legal team has read many times before. A team using a custom licence has to read that licence, for that model version, against its own use. Both are normal; only one is quick.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Three questions to take to the licence text<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Write your use in one sentence first, then ask the licence three things. May we use the model in a commercial product or service? May we modify it, and a fine-tune is a modification? May we redistribute the weights, ours or the original, to anyone outside the company? A tuned adapter you ship to customers is a different case from a model that runs only inside your own account.</p>
+        <p>Read the licence text, not a summary of it, including a summary on this page. Licences are versioned, and a new model release can come with new terms. This is not legal advice: the answer that counts is the one your legal team signs.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The licence is named on the card, not implied by the download button.</strong> All three cards read on 2026-11-08 name their licence explicitly: Llama 3.2 Community License, Apache 2.0, MIT. Constructed Larkline example: Priya sends Larkline's legal team the three names and a one-line use, "internal claim routing, the model never leaves our cloud account, no weights redistributed". Legal answers the Apache and MIT pair the same afternoon and books a reading of the Llama licence for the following week. Nobody said no; one path simply took longer.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers quantisation, edge and latency</span>
+      <h2>Bytes per parameter, and where the model can run</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Every parameter is a number, and every number takes bytes. At 16-bit precision each parameter takes 2 bytes, at 8-bit 1 byte, at 4-bit half a byte. Multiply by the parameter count and you have the weights-only memory: about 8 GB for a 4.0B model at 16-bit, about 2 GB at 4-bit. That one multiplication decides which GPU you can rent, and whether a laptop is even worth trying. It is arithmetic, not a measurement, and it is only the weights.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 352" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Horizontal bars of weights-only memory, parameters times bytes per parameter. Llama 3.2 3B, 3.21B parameters: 6.42 GB at 16-bit, 1.61 GB at 4-bit. Phi-4-mini, 3.8B: 7.6 GB at 16-bit, 1.9 GB at 4-bit. Qwen3-4B, 4.0B: 8.0 GB at 16-bit, 2.0 GB at 4-bit. A dashed line at 24 GB marks an NVIDIA L4's memory. Every bar fits well under it, before the KV cache, activations and runtime are added.">
+        <defs>
+          <filter id="f2cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="77" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f2cH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f2cL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f2cS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f2cB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f2cA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f2cN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f2cH" x="30" y="26">WEIGHTS-ONLY MEMORY = PARAMETERS x BYTES PER PARAMETER</text>
+        <text class="f2cA" x="808" y="42" text-anchor="end">L4 · 24 GB</text>
+
+        <g filter="url(#f2cSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="200" y="60" width="164" height="22" rx="4" transform="rotate(0.3 282 71)" fill="#FBF7DC"/>
+          <rect x="200" y="88" width="41" height="22" rx="4" transform="rotate(-0.3 220 99)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="200" y="136" width="195" height="22" rx="4" transform="rotate(-0.3 297 147)" fill="#FBF7DC"/>
+          <rect x="200" y="164" width="49" height="22" rx="4" transform="rotate(0.3 224 175)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="200" y="212" width="205" height="22" rx="4" transform="rotate(0.3 302 223)" fill="#FBF7DC"/>
+          <rect x="200" y="240" width="51" height="22" rx="4" transform="rotate(-0.3 225 251)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M200 276 L830 276"/>
+          <path d="M814 50 L814 276" stroke-dasharray="6 6"/>
+        </g>
+
+        <text class="f2cL" x="30" y="82">Llama 3.2 3B</text>
+        <text class="f2cS" x="30" y="98">3.21B parameters</text>
+        <text class="f2cL" x="30" y="158">Phi-4-mini</text>
+        <text class="f2cS" x="30" y="174">3.8B parameters</text>
+        <text class="f2cL" x="30" y="234">Qwen3-4B</text>
+        <text class="f2cS" x="30" y="250">4.0B parameters</text>
+
+        <text class="f2cS" x="374" y="75">6.42 GB · 16-bit</text>
+        <text class="f2cB" x="250" y="103">1.61 GB · 4-bit</text>
+        <text class="f2cS" x="404" y="151">7.6 GB · 16-bit</text>
+        <text class="f2cB" x="258" y="179">1.9 GB · 4-bit</text>
+        <text class="f2cS" x="414" y="227">8.0 GB · 16-bit</text>
+        <text class="f2cB" x="260" y="255">2.0 GB · 4-bit</text>
+
+        <text class="f2cA" x="200" y="294" text-anchor="middle">0</text>
+        <text class="f2cA" x="405" y="294" text-anchor="middle">8 GB</text>
+        <text class="f2cA" x="610" y="294" text-anchor="middle">16 GB</text>
+        <text class="f2cA" x="814" y="294" text-anchor="middle">24 GB</text>
+
+        <text class="f2cN" x="30" y="318">Weights only. The KV cache, activations and runtime come on top, and the cache grows with context.</text>
+        <text class="f2cN" x="30" y="336">Arithmetic, not a measurement: 16-bit = 2 bytes, 8-bit = 1 byte, 4-bit = 0.5 byte per parameter.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - going from 16-bit to 4-bit divides the weight file by four; whether quality survives is an eval question, not an arithmetic one</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Quantisation: what is stored, and what you trade<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Quantisation stores each weight with fewer bits. The memory saving is exact and easy to compute; the quality cost is not, and it has to be measured on your own task. Model makers work hard to keep that cost small. Meta's card for Llama 3.2 describes its quantized variants: 4-bit groupwise weights with a group size of 32, produced with SpinQuant or GPTQ, plus a variant trained with quantisation in the loop (QAT) and LoRA. Groupwise means each block of 32 weights shares its own scale, so one outlier does not distort the whole matrix.</p>
+        <p>Notice what the same card says next: those quantized variants support 8k of context, not 128k. Quantisation is a package deal, and the card is where the package is described. Session 4 meets 4-bit weights again from the training side, when QLoRA tunes on top of them.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Latency is something you measure, not something you quote<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Fewer parameters and fewer bytes usually mean faster responses, but "usually" is not a number. Latency depends on your GPU, your serving stack, your batch size, your input and output lengths, and for Qwen3-4B on whether thinking mode is on. None of the three cards gives you a latency figure for your setup, and a number copied from a blog post was measured on someone else's.</p>
+        <p>The professional move is to state the requirement as a number someone signed up to (session 1: urgent claims flagged within 5 seconds, constructed) and then time the candidate on hardware you would really use, at a realistic load. Session 6 treats latency as an input you supply, for exactly this reason.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Edge, on-device and data residency<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A 2 GB weight file opens doors an 8 GB one does not: a single small GPU, and sometimes a laptop or another device at the edge, where the data never travels to a server at all. Whether it runs fast enough there is, again, a measurement. For reference, Hugging Face lists an L4 with 24 GB of GPU memory at $0.80 an hour on its Inference Endpoints (AWS; list price read 2026-11-08, re-verify), and every bar in the figure above sits well under that line.</p>
+        <p>Constructed Larkline example: Larkline's security policy says claim notes may not leave its own cloud account. That one sentence rules out sending notes to a third-party API, and points at an open-weight model served inside Larkline's account, whatever the per-request arithmetic says. The price there comes from Larkline's own cloud provider; the L4 line is a sense of scale, not a quote.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The card describes the quantized model as a different product.</strong> Meta did not just say "also available in 4-bit". The Llama 3.2 card names the method (SpinQuant, GPTQ, and a QAT plus LoRA variant), the scheme (4-bit groupwise, group 32) and the changed limit (8k context). When you pick a quantized build, read its own row of the card, and evaluate that build, not the full-precision one it came from.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Compare three model cards</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya opens the three cards, copies the same fields from each into one dated table, works out the memory by hand, checks each licence against Larkline's actual use, and writes a shortlist with a reason. Do it alongside her for the task you scored in session 1. The table below is built only from the cards; the shortlist is Larkline's, and yours may differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 318" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A comparison grid with three rows and six columns. Llama 3.2 3B Instruct: 3.21B parameters, 128k context with 8k for quantized variants, Llama 3.2 Community licence, 8 official languages, December 2023 cutoff, 1.61 GB at 4-bit weights only. Qwen3-4B: 4.0B with 3.6B non-embedding, 32,768 context or 131,072 with YaRN, Apache 2.0, languages and cutoff not in our read, 2.0 GB at 4-bit. Phi-4-mini-instruct, highlighted as shortlisted: 3.8B, 128K, MIT, 23 listed languages, June 2024 cutoff, 1.9 GB at 4-bit.">
+        <defs>
+          <filter id="f2dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="89" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f2dH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f2dL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f2dS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f2dB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f2dA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f2dN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f2dH" x="30" y="26">PRIYA'S TABLE, READ 2026-11-08: FIVE CARD FIELDS PLUS ONE YOU COMPUTE</text>
+
+        <text class="f2dA" x="242" y="62" text-anchor="middle">parameters</text>
+        <text class="f2dA" x="354" y="62" text-anchor="middle">context</text>
+        <text class="f2dA" x="466" y="62" text-anchor="middle">licence</text>
+        <text class="f2dA" x="578" y="62" text-anchor="middle">languages</text>
+        <text class="f2dA" x="690" y="62" text-anchor="middle">data cutoff</text>
+        <text class="f2dA" x="802" y="62" text-anchor="middle">4-bit weights</text>
+
+        <g filter="url(#f2dSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="74" width="150" height="56" rx="8" transform="rotate(-0.8 105 102)" fill="#FFFFFF"/>
+          <rect x="190" y="74" width="104" height="56" rx="8" transform="rotate(0.5 242 102)" fill="#FFFFFF"/>
+          <rect x="302" y="74" width="104" height="56" rx="8" transform="rotate(-0.4 354 102)" fill="#FFFFFF"/>
+          <rect x="414" y="74" width="104" height="56" rx="8" transform="rotate(0.4 466 102)" fill="#FFFFFF"/>
+          <rect x="526" y="74" width="104" height="56" rx="8" transform="rotate(-0.5 578 102)" fill="#FFFFFF"/>
+          <rect x="638" y="74" width="104" height="56" rx="8" transform="rotate(0.4 690 102)" fill="#FFFFFF"/>
+          <rect x="750" y="74" width="104" height="56" rx="8" transform="rotate(-0.4 802 102)" fill="#FFFFFF"/>
+
+          <rect x="30" y="138" width="150" height="56" rx="8" transform="rotate(0.7 105 166)" fill="#FFFFFF"/>
+          <rect x="190" y="138" width="104" height="56" rx="8" transform="rotate(-0.4 242 166)" fill="#FFFFFF"/>
+          <rect x="302" y="138" width="104" height="56" rx="8" transform="rotate(0.5 354 166)" fill="#FFFFFF"/>
+          <rect x="414" y="138" width="104" height="56" rx="8" transform="rotate(-0.4 466 166)" fill="#FFFFFF"/>
+          <rect x="526" y="138" width="104" height="56" rx="8" transform="rotate(0.4 578 166)" fill="#FBF7DC"/>
+          <rect x="638" y="138" width="104" height="56" rx="8" transform="rotate(-0.5 690 166)" fill="#FBF7DC"/>
+          <rect x="750" y="138" width="104" height="56" rx="8" transform="rotate(0.4 802 166)" fill="#FFFFFF"/>
+
+          <rect x="30" y="202" width="150" height="56" rx="8" transform="rotate(-0.6 105 230)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="190" y="202" width="104" height="56" rx="8" transform="rotate(0.4 242 230)" fill="#FFFFFF"/>
+          <rect x="302" y="202" width="104" height="56" rx="8" transform="rotate(-0.4 354 230)" fill="#FFFFFF"/>
+          <rect x="414" y="202" width="104" height="56" rx="8" transform="rotate(0.5 466 230)" fill="#FFFFFF"/>
+          <rect x="526" y="202" width="104" height="56" rx="8" transform="rotate(-0.4 578 230)" fill="#FFFFFF"/>
+          <rect x="638" y="202" width="104" height="56" rx="8" transform="rotate(0.4 690 230)" fill="#FFFFFF"/>
+          <rect x="750" y="202" width="104" height="56" rx="8" transform="rotate(-0.5 802 230)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="f2dL" x="44" y="100">Llama 3.2 3B</text>
+        <text class="f2dS" x="44" y="118">Instruct · meta-llama</text>
+        <text class="f2dL" x="242" y="100" text-anchor="middle">3.21B</text>
+        <text class="f2dL" x="354" y="100" text-anchor="middle">128k</text>
+        <text class="f2dS" x="354" y="118" text-anchor="middle">quantized: 8k</text>
+        <text class="f2dL" x="466" y="100" text-anchor="middle">Llama 3.2</text>
+        <text class="f2dS" x="466" y="118" text-anchor="middle">Community</text>
+        <text class="f2dL" x="578" y="100" text-anchor="middle">8</text>
+        <text class="f2dS" x="578" y="118" text-anchor="middle">official</text>
+        <text class="f2dL" x="690" y="100" text-anchor="middle">Dec 2023</text>
+        <text class="f2dS" x="690" y="118" text-anchor="middle">pretraining</text>
+        <text class="f2dL" x="802" y="100" text-anchor="middle">1.61 GB</text>
+        <text class="f2dS" x="802" y="118" text-anchor="middle">weights only</text>
+
+        <text class="f2dL" x="44" y="164">Qwen3-4B</text>
+        <text class="f2dS" x="44" y="182">runner-up</text>
+        <text class="f2dL" x="242" y="164" text-anchor="middle">4.0B</text>
+        <text class="f2dS" x="242" y="182" text-anchor="middle">3.6B non-emb.</text>
+        <text class="f2dL" x="354" y="164" text-anchor="middle">32,768</text>
+        <text class="f2dS" x="354" y="182" text-anchor="middle">131,072 YaRN</text>
+        <text class="f2dL" x="466" y="164" text-anchor="middle">Apache 2.0</text>
+        <text class="f2dS" x="466" y="182" text-anchor="middle">open source</text>
+        <text class="f2dL" x="578" y="164" text-anchor="middle">not read</text>
+        <text class="f2dS" x="578" y="182" text-anchor="middle">check card</text>
+        <text class="f2dL" x="690" y="164" text-anchor="middle">not read</text>
+        <text class="f2dS" x="690" y="182" text-anchor="middle">check card</text>
+        <text class="f2dL" x="802" y="164" text-anchor="middle">2.0 GB</text>
+        <text class="f2dS" x="802" y="182" text-anchor="middle">weights only</text>
+
+        <text class="f2dB" x="44" y="228">Phi-4-mini-instruct</text>
+        <text class="f2dS" x="44" y="246">shortlisted</text>
+        <text class="f2dL" x="242" y="228" text-anchor="middle">3.8B</text>
+        <text class="f2dL" x="354" y="228" text-anchor="middle">128K</text>
+        <text class="f2dL" x="466" y="228" text-anchor="middle">MIT</text>
+        <text class="f2dS" x="466" y="246" text-anchor="middle">open source</text>
+        <text class="f2dL" x="578" y="228" text-anchor="middle">23</text>
+        <text class="f2dS" x="578" y="246" text-anchor="middle">listed</text>
+        <text class="f2dL" x="690" y="228" text-anchor="middle">June 2024</text>
+        <text class="f2dS" x="690" y="246" text-anchor="middle">data cutoff</text>
+        <text class="f2dL" x="802" y="228" text-anchor="middle">1.9 GB</text>
+        <text class="f2dS" x="802" y="246" text-anchor="middle">weights only</text>
+
+        <text class="f2dN" x="30" y="282">Values from the three model cards, read 2026-11-08. Shaded cells: not in our read; check the card.</text>
+        <text class="f2dN" x="30" y="300">The shortlist is the constructed Larkline example; yours may differ.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the gaps in the table are findings too: a field you could not read is a field you have not checked</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Open the three cards and write down the date.</strong> Model cards are living pages: new variants, new notes, sometimes new licence versions. A comparison without a date is a comparison nobody can re-check.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · open and date</span>Card 1: https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct
+Card 2: https://huggingface.co/Qwen/Qwen3-4B
+Card 3: https://huggingface.co/microsoft/Phi-4-mini-instruct
+Read on: 2026-11-08 (re-read before any decision)</div>
+      </div>
+      <div class="step">
+        <p><strong>Copy the same five fields from each card.</strong> Parameters, context, licence, languages, data cutoff. If a card does not state a field where you looked, write "not read", not a guess. A blank you admit to beats a number you invented.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · five fields</span>Llama 3.2 3B Instruct
+  params 3.21B · context 128k (quantized variants 8k)
+  licence Llama 3.2 Community License · languages 8 official
+  cutoff December 2023
+Qwen3-4B
+  params 4.0B (3.6B non-embedding) · context 32,768
+  (131,072 with YaRN) · licence Apache 2.0
+  languages: not read · cutoff: not read
+Phi-4-mini-instruct
+  params 3.8B · context 128K · licence MIT
+  languages 23 listed · cutoff June 2024</div>
+      </div>
+      <div class="step">
+        <p><strong>Compute the weights-only memory by hand.</strong> Parameters times bytes per parameter. Label it "weights only" every time you write it down, so nobody mistakes it for the serving footprint.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · memory</span>weights-only GB = parameters (billions) x bytes per parameter
+                   16-bit (x2)     4-bit (x0.5)
+Llama 3.2 3B       6.42 GB         1.61 GB
+Phi-4-mini         7.6 GB          1.9 GB
+Qwen3-4B           8.0 GB          2.0 GB
+Not counted: KV cache, activations, runtime.
+Reference: L4, 24 GB, $0.80/h on HF Inference Endpoints
+(list price read 2026-11-08, re-verify)</div>
+      </div>
+      <div class="step">
+        <p><strong>Check each licence against your actual use, in one sentence.</strong> Write the use first, then mark which licences legal can answer quickly and which need a full reading. Do not decide the legal question yourself.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · licence against use</span>Use (constructed): internal claim routing; the model runs
+  only in Larkline's cloud account; no weights shared outside.
+Qwen3-4B    Apache 2.0       OSI open source: read conditions
+Phi-4-mini  MIT              OSI open source: read conditions
+Llama 3.2   Community Lic.   own terms: full reading by legal
+Status: sent to legal (constructed). Not legal advice.</div>
+      </div>
+      <div class="step">
+        <p><strong>Check the fit for the task, not the leaderboard.</strong> How long is the input? Does the answer need facts? Does the model have a default mode that changes the cost per request?</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · fit for the task</span>Input per request: ~600 tokens (constructed, session 1)
+Context need: far under 8k, so every variant fits
+Facts in the answer: none; one of six fixed queue names
+Qwen3-4B: thinking mode is on by default; test the
+  non-thinking mode for a one-label answer, then measure</div>
+      </div>
+      <div class="step">
+        <p><strong>Shortlist one, with a reason a colleague could argue with.</strong> Name a runner-up too, because session 5's eval may overturn the first choice, and that is the eval doing its job.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · shortlist</span>Shortlist (constructed): Phi-4-mini-instruct
+Reason:  MIT licence; 3.8B, ~1.9 GB at 4-bit (weights only);
+         128K context is more than routing needs; its own card
+         says pair it with search for facts, and routing needs none
+Runner-up: Qwen3-4B (Apache 2.0; serve non-thinking mode)
+Next: build the training set (session 3), decide on the eval
+      (session 5). Your shortlist will differ.</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>The table is the deliverable, not the pick.</strong> A dated, sourced table with honest gaps lets anyone re-run the choice when a new model card appears next quarter. Keep it next to the eval set from session 1: the eval decides between the shortlisted models, and the table explains why those were the ones on the bench.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 3</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Finish your own five-field table</strong> for the three cards, dated the day you read them, and mark every field you could not find as "not read".</li>
+      <li><strong>Compute the weights-only memory</strong> for one other model you are curious about, at 16-bit and 4-bit, and write which GPU memory size it would fit under before the cache and runtime are added.</li>
+      <li><strong>Write your use in one sentence</strong> and send it, with the licence names, to whoever signs off licences in your organisation. Note how long each answer takes.</li>
+      <li><strong>Pull 20 real inputs</strong> from your task and estimate their token length. You will need them for the training set in session 3, and the length tells you whether context will ever bind.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and session 2 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · You can download Llama 3.2 3B's weights from Hugging Face. Which statement is accurate?</p>
+      <button class="qopt" type="button">A · Downloadable weights make it open source, so any use is allowed</button>
+      <button class="qopt" type="button">B · It is an open-weight model under the Llama 3.2 Community License, which is not an OSI open-source licence; read its terms against your use</button>
+      <button class="qopt" type="button">C · It is under Apache 2.0, like Qwen3-4B</button>
+      <button class="qopt" type="button">D · Licences only matter if you charge customers for the model itself</button>
+      <p class="qwhy">Open weights describes what was published; open source is a property of the licence. The card names the Llama 3.2 Community License, Meta's own licence. Apache 2.0 belongs to Qwen3-4B and MIT to Phi-4-mini. Internal use is still use: D skips the reading.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · Qwen3-4B has 4.0B parameters. Roughly how much memory do its weights alone take at 4-bit?</p>
+      <button class="qopt" type="button">A · About 16 GB</button>
+      <button class="qopt" type="button">B · About 8 GB</button>
+      <button class="qopt" type="button">C · About 4 GB</button>
+      <button class="qopt" type="button">D · About 2 GB, before the KV cache, activations and runtime</button>
+      <p class="qwhy">4-bit is half a byte per parameter: 4.0B x 0.5 = 2.0 GB. B is the 16-bit figure (2 bytes per parameter) and C is 8-bit. The serving footprint is larger than the weights, so the answer always carries "weights only".</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · Phi-4-mini-instruct's card says it "simply does not have the capacity to store too much factual knowledge". What does that suggest for a build?</p>
+      <button class="qopt" type="button">A · Give it behaviour from the weights and pair it with retrieval or search for facts</button>
+      <button class="qopt" type="button">B · Fine-tune it on your policy documents until it remembers them</button>
+      <button class="qopt" type="button">C · Avoid small models for any task at all</button>
+      <button class="qopt" type="button">D · Quantise it to 4-bit to make room for more facts</button>
+      <p class="qwhy">The card itself suggests pairing the model with search. That matches session 1's split: tune for behaviour, retrieve for knowledge. Quantising shrinks the stored numbers; it does not add capacity, so D gets it backwards.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Model cards: Llama 3.2 3B Instruct, Qwen3-4B, Phi-4-mini-instruct</span><span class="note">Parameters, context (including the 8k quantized Llama variants and Qwen's YaRN extension), licence names, languages, data cutoffs, quantisation scheme and the Phi card's warning on factual capacity; read on Hugging Face 2026-11-08, re-read before you decide</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Hugging Face Inference Endpoints pricing</span><span class="note">L4 with 24 GB at $0.80 an hour on AWS, used only as a sense of scale; list price read 2026-11-08, re-verify</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">DeepLearning.AI, Finetuning Large Language Models</span><span class="note">Its framing of where fine-tuning fits shares this session's starting point; videos and certificate stay with the official short course</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Larkline, Priya, Tom, the legal review and the shortlist</span><span class="note">Constructed for teaching; no Larkline number or decision is a measurement</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 2 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Small means 3-4B</b><span>Llama 3.2 3B at 3.21B, Phi-4-mini at 3.8B, Qwen3-4B at 4.0B.</span></div>
+      <div class="cheat-item"><b>Fewer parameters, fewer facts</b><span>Give a small model behaviour; pair it with retrieval for knowledge, as Phi's card says.</span></div>
+      <div class="cheat-item"><b>Read the context footnote</b><span>Quantized Llama variants: 8k, not 128k. Qwen: 32,768 native, 131,072 with YaRN.</span></div>
+      <div class="cheat-item"><b>Open weights, not open source</b><span>Apache 2.0 and MIT are OSI licences; Llama 3.2 Community License has its own terms. Read the text.</span></div>
+      <div class="cheat-item"><b>Bytes per parameter</b><span>16-bit = 2, 8-bit = 1, 4-bit = 0.5. A 4.0B model: ~8 GB or ~2 GB, weights only.</span></div>
+      <div class="cheat-item"><b>Measure latency</b><span>Time it on your hardware, at your load. Never borrow someone else's number.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>A shortlisted model is only as good as what you teach it. Session 3 builds the training set: the chat format, label quality, duplicates, leakage between train and test, and how many examples is enough, with the sources that disagree on that last one.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Session 2 of 6 · learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="01-the-decision-ladder.html">← Prev: Prompt, RAG or fine-tune?</a> &nbsp;·&nbsp; <a href="03-building-the-training-set.html">Next: The training set →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

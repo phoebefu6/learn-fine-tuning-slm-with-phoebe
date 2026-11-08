@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 1 of 6. What fine-tuning changes and what it does not: behaviour, format and a narrow task, never fresh facts. The ladder prompt, few-shot, RAG, fine-tune, distil, the three questions that tell you whether to climb, and Larkline's claim-triage task scored against it.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Prompt, RAG or fine-tune? The decision ladder - learn fine-tuning slm with phoebe">
+<meta property="og:description" content="Session 1 of 6. Fine-tuning changes how a model responds, not what it knows. Climb the ladder only when the rung below fails on your eval.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/courses/01-the-decision-ladder.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Prompt, RAG or fine-tune? The decision ladder - learn fine-tuning slm with phoebe">
+<meta name="twitter:description" content="Session 1 of 6. Where each lever acts, the five-rung ladder, and when to climb.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 1 · Prompt, RAG or fine-tune? The decision ladder - learn fine-tuning slm with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-fine-tuning-slm-with-phoebe</a> / Session 1 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Fine-tuning and Small Language Models with Phoebe · Session 1 of 6</div>
+    <h1>Prompt, RAG or fine-tune? The <span class="accent">decision ladder</span></h1>
+    <p class="sub">"Should we fine-tune?" usually arrives as a solution looking for a problem. Fine-tuning is a real tool with a narrow job: it changes how a model responds, the format, the tone, the boundary of one task, and it does that by changing the weights once, at training time. It is not how a model learns this week's facts. Tonight we place each lever where it actually acts, climb the five-rung ladder from prompt to distillation, and score one real-shaped task against it before anyone rents a GPU.</p>
+    <div class="chip-row">
+      <span class="chip level">🟢 Foundations</span>
+      <span class="chip audience">Builders who already prompt</span>
+      <span class="chip audience">No GPU needed</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Levers, ladder, when to climb</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: score Larkline's task</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Constructed Larkline example. Larkline is an invented mid-size insurer. Its claims desk receives about 900,000 messages a month: first notices of loss, portal messages, call summaries. A prompt on a big general API model reads each one and routes it to one of six queues, and flags the urgent queue for same-day handling. It works, but it is slow at peak and the monthly bill keeps rising with volume. Priya, Larkline's ML engineer, has been asked one question: should we fine-tune a small model to do this instead? Larkline, Priya and every Larkline number are invented for teaching; the evidence behind each move is real and cited.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = do it yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A one-line answer to "what does fine-tuning change?", the five rungs in order with what each one costs, the three questions that decide whether to climb, and a six-line scorecard of your own task that you can hand to whoever asked "should we fine-tune?".</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers what fine-tuning changes</span>
+      <h2>Where each lever acts</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Every lever on the ladder works in one of two places. Prompts, worked examples and retrieved documents all go into the context window, so they change what the model sees on this one request, and they can change again on the next. A fine-tune changes the weights, so it changes how the model responds to everything, once, at training time. Most bad fine-tuning projects are a fact problem sent to the weights.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A claim note flows into the context window, which holds three slots: instructions from the prompt, worked examples from few-shot, and retrieved documents from RAG. It then flows into the model weights, drawn as a hatched frozen base with a highlighted LoRA nudge from fine-tuning, and out as a queue and urgency. The context changes per request; the weights change once, at training time.">
+        <defs>
+          <filter id="f1aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f1aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="f1aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f1aH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f1aL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f1aS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f1aB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f1aA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f1aN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f1aH" x="30" y="26">TWO PLACES A LEVER CAN ACT: WHAT THE MODEL SEES, AND HOW IT RESPONDS</text>
+
+        <g filter="url(#f1aSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="110" width="120" height="60" rx="8" transform="rotate(-1.5 90 140)" fill="#FFFFFF"/>
+          <path d="M154 140 L194 140" marker-end="url(#f1aAr)"/>
+          <rect x="200" y="56" width="250" height="164" rx="10" transform="rotate(-0.4 325 138)" fill="#FBF7DC"/>
+          <rect x="216" y="96" width="218" height="32" rx="6" fill="#FFFFFF"/>
+          <rect x="216" y="136" width="218" height="32" rx="6" fill="#FFFFFF"/>
+          <rect x="216" y="176" width="218" height="32" rx="6" fill="#FFFFFF"/>
+          <path d="M454 140 L494 140" marker-end="url(#f1aAr)"/>
+          <rect x="500" y="56" width="200" height="164" rx="10" transform="rotate(0.4 600 138)" fill="#FFFFFF"/>
+          <rect x="516" y="92" width="168" height="44" rx="6" fill="url(#f1aHc)"/>
+          <rect x="516" y="166" width="168" height="40" rx="6" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M704 140 L744 140" marker-end="url(#f1aAr)"/>
+          <rect x="750" y="110" width="110" height="60" rx="8" transform="rotate(1.5 805 140)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="f1aL" x="90" y="136" text-anchor="middle">claim note</text>
+        <text class="f1aS" x="90" y="154" text-anchor="middle">a new request</text>
+        <text class="f1aL" x="216" y="82">CONTEXT WINDOW</text>
+        <text class="f1aS" x="228" y="117">instructions · prompt</text>
+        <text class="f1aS" x="228" y="157">worked examples · few-shot</text>
+        <text class="f1aS" x="228" y="197">retrieved documents · RAG</text>
+        <text class="f1aL" x="516" y="82">MODEL WEIGHTS</text>
+        <text class="f1aS" x="600" y="154" text-anchor="middle">frozen base weights</text>
+        <text class="f1aB" x="600" y="191" text-anchor="middle">LoRA nudge · fine-tune</text>
+        <text class="f1aL" x="805" y="136" text-anchor="middle">queue +</text>
+        <text class="f1aL" x="805" y="154" text-anchor="middle">urgency</text>
+        <text class="f1aA" x="325" y="244" text-anchor="middle">changes per request, instantly</text>
+        <text class="f1aA" x="600" y="244" text-anchor="middle">changes once, at training</text>
+
+        <text class="f1aN" x="30" y="280">Prompts and RAG change what the model sees; a fine-tune changes how it responds. Facts belong on the left.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - a fact that changes next month belongs in the context window, where it can change next month too</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Behaviour, format, style, one narrow task<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>What a fine-tune is good at is consistency of response. The same six queue names spelled exactly the same way every time. A JSON object with no chatty preamble. A house tone. A task boundary, such as "route, never answer the customer". These are things a prompt can ask for and a model can still drift away from, especially a small model, and they are things that a few hundred good demonstrations can pin down.</p>
+        <p>OpenAI's own supervised fine-tuning guide puts the order bluntly: "Only invest in fine-tuning after setting up evals." That one line is the shape of this whole path: the eval comes first, the tune second, and session 5 is where the two meet.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Fresh facts: the disagreement, stated fairly<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>"Fine-tune it on our documents so it knows our policies" is the most common request, and the evidence leans hard against it. Ovadia and colleagues (2023) compared unsupervised fine-tuning with retrieval for injecting knowledge and found that retrieval consistently outperformed fine-tuning, for knowledge the model had seen and for entirely new knowledge. Gekhman and colleagues (2024) found that examples carrying new facts are learned significantly slower than examples consistent with what the model knows, and that once learned they linearly increase the model's tendency to hallucinate. The LIMA paper (Zhou et al. 2023) argues that almost all knowledge is learned during pretraining.</p>
+        <p>The other side deserves its due. Ovadia's paper also reports that training on many paraphrases of the same fact may ease the difficulty, and a narrow vocabulary, such as Larkline's internal queue names, is "knowledge" a tune does teach well. The working rule most practitioners use is: fine-tune for behaviour, retrieve for knowledge. Treat it as a strong default, not a law, and test it on your own eval. The RAG side of that rule is taught in <a href="https://phoebefu6.github.io/learn-rag-with-phoebe/courses/a1-what-rag-is.html">Learn RAG with Phoebe ↗</a>, which uses the same split.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The model card that says it out loud.</strong> Microsoft's model card for Phi-4-mini-instruct, a 3.8-billion-parameter model, says the model "simply does not have the capacity to store too much factual knowledge" and suggests pairing it with a search engine. The people who built the small model are telling you which job to give it: behaviour from the weights, facts from retrieval.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the ladder</span>
+      <h2>Five rungs, climbed in order</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">The ladder runs from the cheapest, most reversible lever to the most expensive and most locked-in: a prompt, then worked examples in the prompt, then retrieval, then a fine-tune, then distillation into a smaller model. Each rung costs more time, more data and more ownership than the one below. You climb a rung only when the one below has been tried and has failed on your eval, not on a hunch.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A staircase of five rungs rising to the right. Rung 1 prompt, write instructions, minutes. Rung 2 few-shot, show 3 to 5 examples, an hour. Rung 3 RAG, fetch the facts, days to weeks. Rung 4 fine-tune, change behaviour, weeks plus labelled data, highlighted. Rung 5 distil, teach a smaller model, weeks plus a teacher model. An arrow along the bottom says cost, effort and lock-in rise to the right.">
+        <defs>
+          <filter id="f1bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="23" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="f1bAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f1bH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f1bL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f1bS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f1bB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f1bA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f1bN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f1bH" x="30" y="26">THE LADDER: CLIMB A RUNG ONLY WHEN THE ONE BELOW HAS FAILED ON YOUR EVAL</text>
+
+        <g filter="url(#f1bSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="250" width="150" height="60" rx="8" transform="rotate(-0.6 115 280)" fill="#FFFFFF"/>
+          <rect x="200" y="206" width="150" height="60" rx="8" transform="rotate(0.5 275 236)" fill="#FFFFFF"/>
+          <rect x="360" y="162" width="150" height="60" rx="8" transform="rotate(-0.5 435 192)" fill="#FBF7DC"/>
+          <rect x="520" y="118" width="150" height="60" rx="8" transform="rotate(0.6 595 148)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="680" y="74" width="150" height="60" rx="8" transform="rotate(-0.5 755 104)" fill="#FFFFFF"/>
+          <path d="M40 340 L830 340" marker-end="url(#f1bAr)"/>
+        </g>
+
+        <text class="f1bL" x="52" y="274">1 · prompt</text>
+        <text class="f1bS" x="52" y="292">write instructions</text>
+        <text class="f1bA" x="52" y="326">minutes</text>
+        <text class="f1bL" x="212" y="230">2 · few-shot</text>
+        <text class="f1bS" x="212" y="248">show 3-5 examples</text>
+        <text class="f1bA" x="212" y="282">an hour</text>
+        <text class="f1bL" x="372" y="186">3 · RAG</text>
+        <text class="f1bS" x="372" y="204">fetch the facts</text>
+        <text class="f1bA" x="372" y="238">days to weeks</text>
+        <text class="f1bB" x="532" y="142">4 · fine-tune</text>
+        <text class="f1bS" x="532" y="160">change behaviour</text>
+        <text class="f1bA" x="532" y="194">weeks + labelled data</text>
+        <text class="f1bL" x="692" y="98">5 · distil</text>
+        <text class="f1bS" x="692" y="116">teach a smaller model</text>
+        <text class="f1bA" x="692" y="150">weeks + a teacher</text>
+        <text class="f1bA" x="40" y="360">cost, effort and lock-in rise to the right</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - each rung is cheaper to undo than the one above it, which is the whole reason to climb in order</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Rungs 1 to 3: the ones you already own<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Prompt.</strong> Clear instructions, the six queue names with a one-line definition each, and the output format. Minutes to change, free to undo. <strong>Few-shot.</strong> Three to five worked examples in the prompt: hard-to-describe boundaries are easy to demonstrate. Still no training. Both are taught properly in <a href="https://phoebefu6.github.io/learn-prompt-engineering-with-phoebe/courses/b2-core-techniques.html">Learn Prompt Engineering with Phoebe ↗</a>. <strong>RAG.</strong> Retrieve the documents the answer depends on and put them in the context. It is the rung for knowledge that changes, and it lives next door.</p>
+        <p>For Larkline the first two rungs are already in place: the routing prompt has instructions and four worked examples. Retrieval adds little, because routing a note to a queue does not depend on facts that change weekly. That is already a hint about which rung is next.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Rungs 4 and 5: fine-tune, then distil<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Fine-tune.</strong> Train the model's weights, usually a small adapter on top of frozen weights (session 4), on a few hundred to a few thousand labelled demonstrations of the exact behaviour. You now own a dataset, a training run, an eval, and somewhere to serve the result. <strong>Distil.</strong> Use a big model as the teacher: it labels or explains thousands of examples, and a much smaller student is trained on them. Hsieh and colleagues (2023) report a fine-tuned 770-million-parameter T5 that outperformed few-shot prompted 540-billion-parameter PaLM on one benchmark, using 80 percent of the available data, by training on the teacher's rationales as well as its labels.</p>
+        <p>Read that result with its limits: one benchmark, one task family, in the authors' own setup. It shows what is possible on a narrow task, not that small beats big in general.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The rung can move under you.</strong> OpenAI's supervised fine-tuning guide, read on 2026-11-08, says the platform "is no longer accessible to new users", and that eligible existing customers can create training jobs until January 6, 2027. A team whose plan was "tune it on the vendor's API" now needs a different plan. What survives a vendor change is the labelled dataset and the eval, which is why sessions 3 and 5 treat those as the real assets.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers when to climb</span>
+      <h2>Three questions before rung four</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Three questions do most of the deciding. Is the gap about facts that change? Then retrieval, not a tune. Do you have an eval that shows the prompt has stopped improving? If not, the eval comes first. Only then: is the task stable, high-volume or latency-bound enough that a tuned small model would pay for itself? Session 6 puts numbers on that last question.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A decision tree. Is the gap facts that change? If yes, retrieve with RAG: a tune will not keep up. If no, does an eval show the prompt has plateaued? If yes, the task is a candidate for a tune: go to the cost and data checks. If no, build the eval first, then climb.">
+        <defs>
+          <filter id="f1cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="37" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="f1cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f1cH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f1cL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f1cS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f1cB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f1cA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f1cN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f1cH" x="30" y="26">BEFORE RUNG FOUR: THE FIRST TWO QUESTIONS</text>
+
+        <g filter="url(#f1cSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="130" width="240" height="56" rx="10" transform="rotate(-0.6 160 158)" fill="#FFFFFF"/>
+          <rect x="340" y="196" width="240" height="56" rx="10" transform="rotate(0.5 460 224)" fill="#FFFFFF"/>
+          <rect x="640" y="46" width="200" height="56" rx="10" transform="rotate(0.7 740 74)" fill="#FBF7DC"/>
+          <rect x="640" y="150" width="200" height="64" rx="10" transform="rotate(-0.6 740 182)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="640" y="250" width="200" height="56" rx="10" transform="rotate(0.5 740 278)" fill="#FBF7DC"/>
+          <path d="M282 150 C420 120 520 80 636 74" marker-end="url(#f1cAr)"/>
+          <path d="M282 172 C300 196 318 214 336 220" marker-end="url(#f1cAr)"/>
+          <path d="M582 214 C600 200 616 190 636 184" marker-end="url(#f1cAr)"/>
+          <path d="M582 236 C600 254 616 268 636 276" marker-end="url(#f1cAr)"/>
+        </g>
+
+        <text class="f1cL" x="56" y="154">Is the gap facts</text>
+        <text class="f1cL" x="56" y="170">that change?</text>
+        <text class="f1cL" x="356" y="220">Does an eval show the</text>
+        <text class="f1cL" x="356" y="236">prompt has plateaued?</text>
+        <text class="f1cL" x="656" y="70">Retrieve (RAG).</text>
+        <text class="f1cS" x="656" y="86">A tune will not keep up.</text>
+        <text class="f1cB" x="656" y="172">Candidate for a tune:</text>
+        <text class="f1cS" x="656" y="188">now check cost, data</text>
+        <text class="f1cS" x="656" y="202">and stability</text>
+        <text class="f1cL" x="656" y="274">Build the eval first,</text>
+        <text class="f1cS" x="656" y="290">then climb</text>
+        <text class="f1cA" x="430" y="96">yes</text>
+        <text class="f1cA" x="318" y="196">no</text>
+        <text class="f1cA" x="596" y="182">yes</text>
+        <text class="f1cA" x="580" y="270">no</text>
+
+        <text class="f1cN" x="30" y="326">OpenAI's guide: "Only invest in fine-tuning after setting up evals." The third question waits for session 6.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - two of the three exits are not a fine-tune, and that is the usual answer</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Long prompts against a tune: the second disagreement<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Context windows grew, and with them a real argument: why tune at all when you can paste hundreds of examples into the prompt? Bertsch and colleagues (2024) found that for datasets with large label spaces, in-context performance keeps rising with thousands of demonstrations, and that fine-tuning is more data hungry than in-context learning, but can exceed it with additional data. The LoRA Land report (Zhao et al. 2024) went the other way on its own benchmark set: across 31 tasks, 4-bit LoRA fine-tuned models outperformed GPT-4 by 10 points on average.</p>
+        <p>Both can be true, because they measure different tasks under different budgets. Long prompts cost you on every single request; a tune costs you once and then on hosting. Which wins for you depends on your volume, your latency and your eval, and the honest move is to test both, not to quote one paper.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The third question, in words before numbers<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A tune pays for itself when three things hold at once. The task is stable: the six queues do not change every quarter, so the labelled set stays true. The volume is high: a per-request price paid hundreds of thousands of times a month is larger than a fixed hosting bill. Or the latency matters: a small model on your own GPU can answer faster than a large one over an API. If none of the three holds, the cheaper rungs win on total cost even if the tune wins on accuracy.</p>
+        <p>There is a fourth, quieter reason that sometimes decides alone: data residency. Some notes may not leave Larkline's own cloud account. That is a constraint, not a cost, and it points at an open-weight small model regardless of the arithmetic.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Score Larkline's task against the ladder</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya answers six questions about the claim-triage task, one line each, and marks whether the answer points towards a tune or away from one. Write the same six lines for a task of your own as you go. If you have none, use Larkline, and notice which line stops the project.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Six cards in two rows, one per question, each with Larkline's answer. Behaviour or knowledge: routing is behaviour, six fixed queues, points to a tune. Is the task stable: queues unchanged for two years, points to a tune. Is there an eval: not yet, no labelled held-out set, hold, highlighted. Volume: 900,000 a month on a big model, points to a tune. Latency: triage within seconds, points to a tune. Labelled data: agents' past routing, unchecked, points to a tune with a warning.">
+        <defs>
+          <filter id="f1dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="41" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f1dH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f1dL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f1dS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f1dB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f1dA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f1dN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f1dH" x="30" y="26">LARKLINE'S SCORECARD (CONSTRUCTED): SIX LINES, ONE STOPS THE PROJECT</text>
+
+        <g filter="url(#f1dSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="46" width="260" height="92" rx="10" transform="rotate(-0.6 160 92)" fill="#FFFFFF"/>
+          <rect x="310" y="46" width="260" height="92" rx="10" transform="rotate(0.5 440 92)" fill="#FFFFFF"/>
+          <rect x="590" y="46" width="260" height="92" rx="10" transform="rotate(-0.4 720 92)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="30" y="156" width="260" height="92" rx="10" transform="rotate(0.4 160 202)" fill="#FFFFFF"/>
+          <rect x="310" y="156" width="260" height="92" rx="10" transform="rotate(-0.5 440 202)" fill="#FFFFFF"/>
+          <rect x="590" y="156" width="260" height="92" rx="10" transform="rotate(0.6 720 202)" fill="#FBF7DC"/>
+        </g>
+
+        <text class="f1dL" x="44" y="70">1 · Behaviour or knowledge?</text>
+        <text class="f1dS" x="44" y="90">routing is behaviour: six fixed queues</text>
+        <text class="f1dA" x="44" y="124">points to a tune</text>
+        <text class="f1dL" x="324" y="70">2 · Is the task stable?</text>
+        <text class="f1dS" x="324" y="90">queues unchanged for two years</text>
+        <text class="f1dA" x="324" y="124">points to a tune</text>
+        <text class="f1dL" x="604" y="70">3 · Is there an eval?</text>
+        <text class="f1dS" x="604" y="90">not yet: no labelled held-out set</text>
+        <text class="f1dB" x="604" y="124">HOLD: build it first</text>
+        <text class="f1dL" x="44" y="180">4 · Volume and cost?</text>
+        <text class="f1dS" x="44" y="200">900,000 a month on a big model</text>
+        <text class="f1dA" x="44" y="234">points to a tune</text>
+        <text class="f1dL" x="324" y="180">5 · Latency need?</text>
+        <text class="f1dS" x="324" y="200">urgent triage within seconds</text>
+        <text class="f1dA" x="324" y="234">points to a tune</text>
+        <text class="f1dL" x="604" y="180">6 · Labelled data?</text>
+        <text class="f1dS" x="604" y="200">agents' past routing, unchecked</text>
+        <text class="f1dA" x="604" y="234">a tune, with a warning</text>
+
+        <text class="f1dN" x="30" y="280">Five lines point up the ladder. Line 3 is the one that decides what Priya does on Monday.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - a scorecard with one HOLD is not a no; it is the next task, and it is the cheapest one on the list</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Name the gap in one line, then ask which side of Part 1's figure it sits on.</strong> If the gap is "it does not know X", stop and look at retrieval. If the gap is "it does not do X consistently", keep going.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · behaviour or knowledge</span>Gap:   the big model routes well, but costs too much at
+       900,000 notes a month and is slow at peak.
+Side:  behaviour. Six fixed queue names, one label per note.
+       No fact in the answer changes week to week.</div>
+      </div>
+      <div class="step">
+        <p><strong>Check that the task will hold still.</strong> A tune learns the task as it is on the day the data was labelled. Ask the owner how often the categories have changed.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · stability</span>Asked Tom (claims operations lead, constructed):
+"When did the six queues last change?"
+Answer: two years ago, when Fraud and loss was split out.
+Next planned change: none on the roadmap.</div>
+      </div>
+      <div class="step">
+        <p><strong>Ask for the eval, by name.</strong> Not "we check it sometimes": a fixed set of labelled examples the current system is scored on, kept out of any training. If it does not exist, this line says HOLD.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · the eval</span>Current eval:  none. Quality is judged by complaints.
+Action:        label 600 held-out notes before any tuning
+               (session 3 builds it; session 5 scores against it).
+Status:        HOLD</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the volume and the current cost per request.</strong> Rough is fine tonight; session 6 makes it exact. The question is only whether volume is large enough to matter.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · volume</span>Volume:      ~900,000 routed messages a month (constructed)
+Per request: ~600 input tokens (prompt + 4 examples + note)
+             ~20 output tokens (queue + urgency)
+Verdict:     large enough that the per-request price matters</div>
+      </div>
+      <div class="step">
+        <p><strong>State the latency need as a number someone signed up to.</strong> "Fast" is not a requirement. "Urgent claims flagged within 5 seconds of arrival" is.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · latency</span>Requirement:  urgent queue flagged within 5 seconds (constructed)
+Today:        meets it off-peak, misses it at Monday 09:00 peaks
+Points to:    a model Larkline can scale itself, or a faster API tier</div>
+      </div>
+      <div class="step">
+        <p><strong>Find the labels you already have, and say how much you trust them.</strong> Most teams have history: what a human did with each item. It is a start, not a gold set.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · data</span>Have:     18 months of notes with the queue an agent chose
+Trust:    unchecked; agents re-route ~1 in 20 later (constructed)
+Next:     relabel a sample and measure agreement (session 3)
+Verdict:  enough to try a tune, after cleaning</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Read the scorecard top to bottom, then act on the first HOLD.</strong> Priya's Monday is not "start the fine-tune". It is "label 600 held-out notes and score the current prompt on them". That set is what will later prove or disprove the tune, and it is useful even if the answer is "keep the big model".</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 2</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Finish your six lines</strong> for a real task you have been asked to "maybe fine-tune". Mark each one towards, away, or HOLD.</li>
+      <li><strong>Sort three requests you have heard</strong> ("make it know our products", "make it always answer in JSON", "make it sound like us") into behaviour or knowledge, and write the rung each belongs on.</li>
+      <li><strong>Find your current cost per 1,000 requests</strong> from your API dashboard or invoice. Session 6 needs it.</li>
+      <li><strong>Read one small model card</strong> on Hugging Face and note its parameter count, context length and licence name. Session 2 compares three.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and session 1 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">1 · Larkline's refund policy changes every quarter, and agents want the model to quote the current one. Which rung fits?</p>
+      <button class="qopt" type="button">A · Fine-tune on the policy documents each quarter</button>
+      <button class="qopt" type="button">B · Distil a small model from a big one that has read the policy</button>
+      <button class="qopt" type="button">C · Retrieval: put the current policy in the context at request time</button>
+      <button class="qopt" type="button">D · A longer system prompt with every past version of the policy</button>
+      <p class="qwhy">A changing fact belongs in the context window, where it can change too. Ovadia et al. (2023) found retrieval consistently beat unsupervised fine-tuning for knowledge, and Gekhman et al. (2024) found new facts are learned slowly and raise hallucination once learned. D pastes in stale versions as well as the current one.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">2 · Which statement about fine-tuning and evals matches OpenAI's own supervised fine-tuning guide?</p>
+      <button class="qopt" type="button">A · Only invest in fine-tuning after setting up evals</button>
+      <button class="qopt" type="button">B · Fine-tune first, then build evals from the tuned model's outputs</button>
+      <button class="qopt" type="button">C · Evals are optional when you have more than 1,000 examples</button>
+      <button class="qopt" type="button">D · Fine-tuning replaces the need for a held-out set</button>
+      <p class="qwhy">The guide says it in those words. Without an eval made before the tune, there is no baseline to beat and no way to tell a better model from a different one. B builds the eval from the thing it is supposed to judge.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">3 · A colleague cites LoRA Land: "tuned small models beat GPT-4 by 10 points, so we should tune." What is the fair reading?</p>
+      <button class="qopt" type="button">A · It is a vendor blog post with no data, so ignore it</button>
+      <button class="qopt" type="button">B · It proves small tuned models beat GPT-4 on any task</button>
+      <button class="qopt" type="button">C · It shows long prompts never help</button>
+      <button class="qopt" type="button">D · It is an average over 31 tasks in the authors' benchmark set; useful evidence that a narrow tune can win, to be tested on your own eval</button>
+      <p class="qwhy">LoRA Land (Zhao et al. 2024) reports a 10-point average over its own 31 tasks. Bertsch et al. (2024) find long-context in-context learning keeps improving with thousands of demonstrations. Both are task-specific; your eval decides for your task.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">OpenAI supervised fine-tuning guide</span><span class="note">"Only invest in fine-tuning after setting up evals", and the notice that the platform is closed to new users with jobs until January 6, 2027; read at source 2026-11-08, re-verify before delivery</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Ovadia et al. 2023; Gekhman et al. 2024; Zhou et al. 2023 (LIMA)</span><span class="note">Knowledge injection: retrieval beats unsupervised fine-tuning; new facts learned slowly and raise hallucination; knowledge comes from pretraining. Abstracts read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Bertsch et al. 2024; Zhao et al. 2024 (LoRA Land); Hsieh et al. 2023</span><span class="note">Long-context in-context learning against fine-tuning, the 31-task average, and distilling step-by-step. Abstracts read at source; each result is task-specific</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Phi-4-mini-instruct model card</span><span class="note">The card's own warning on factual capacity and its suggestion to pair the model with search</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">DeepLearning.AI, Finetuning Large Language Models</span><span class="note">The "why finetune" and "where finetuning fits in" lessons share this session's core; videos and certificate stay with the official short course</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Larkline, Priya, Tom and every Larkline number</span><span class="note">Constructed for teaching; no number about them is a measurement</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 1 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Two places to act</b><span>Context changes what the model sees, per request. Weights change how it responds, once.</span></div>
+      <div class="cheat-item"><b>Behaviour, not facts</b><span>Tune for format, tone and a narrow task. Retrieve for knowledge that changes.</span></div>
+      <div class="cheat-item"><b>The ladder</b><span>Prompt, few-shot, RAG, fine-tune, distil. Climb only when the rung below fails on your eval.</span></div>
+      <div class="cheat-item"><b>Eval first</b><span>"Only invest in fine-tuning after setting up evals." (OpenAI's guide)</span></div>
+      <div class="cheat-item"><b>When a tune pays</b><span>Stable task, high volume, or a latency need. Data residency can decide alone.</span></div>
+      <div class="cheat-item"><b>Keep the assets</b><span>Vendors and models change. The labelled set and the eval survive both.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>If rung four is in play, the next question is which model to tune. Session 2 opens three real small-model cards and reads what you give up and what you get back: parameters, context, licence, quantisation and latency.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Session 1 of 6 · learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="../index.html">← Course home</a> &nbsp;·&nbsp; <a href="02-small-models-trade-offs.html">Next: Small language models →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

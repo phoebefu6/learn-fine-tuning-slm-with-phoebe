@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 4 of 6. LoRA freezes the base weights and trains two thin matrices beside them; QLoRA does the same on a 4-bit base. Read every LoraConfig knob against the PEFT docs, compute the trainable fraction by hand, and estimate whether Larkline's 4B-class tune fits a 24 GB L4.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="LoRA and QLoRA without the maths fear - learn fine-tuning slm with phoebe">
+<meta property="og:description" content="Session 4 of 6. h = Wx + (alpha/r)BAx: what is frozen, what trains, what each config knob does, and how much GPU memory a small tune really needs.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/courses/04-lora-and-qlora.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="LoRA and QLoRA without the maths fear - learn fine-tuning slm with phoebe">
+<meta name="twitter:description" content="Session 4 of 6. Frozen weights, two thin matrices, a 4-bit base, and a memory estimate you can defend.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 4 · LoRA and QLoRA without the maths fear - learn fine-tuning slm with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-fine-tuning-slm-with-phoebe</a> / Session 4 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Fine-tuning and Small Language Models with Phoebe · Session 4 of 6</div>
+    <h1>LoRA and QLoRA without the <span class="accent">maths fear</span></h1>
+    <p class="sub">LoRA has a reputation for linear algebra, and the reputation is bigger than the idea. You leave the model's weights exactly as they are, put two thin matrices beside each one, and train only those. QLoRA does the same thing on a base model squeezed to 4 bits so it fits on one modest GPU. Tonight we draw the one equation, read every knob in a real config against the docs, and work out by hand whether Larkline's tune fits on a 24 GB card before anyone presses train.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Deeper</span>
+      <span class="chip audience">Builders and ML engineers</span>
+      <span class="chip audience">No GPU needed tonight</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · LoRA, the knobs, QLoRA</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: read a config, estimate memory</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya now has a clean, split training set for the six-queue claim-triage task (session 3) and a 4B-class open-weight model on her shortlist (session 2). Tom, the claims operations lead, has one question for her before he signs anything: "What hardware does this need, and what exactly are we changing in the model?" Priya does not have a GPU budget yet. She has the PEFT docs, the TRL docs, Unsloth's memory table and a pencil. That turns out to be enough to answer Tom honestly. Larkline, Priya, Tom and every Larkline number are invented for teaching; the evidence behind each move is real and cited.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = do it yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> The LoRA equation drawn as a picture you can explain to a manager, a line-by-line reading of a real LoraConfig, the trainable fraction worked out by hand, a memory estimate read from a published table rather than guessed, and a one-page run card that makes your tune repeatable.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers full fine-tune vs PEFT</span>
+      <h2>Freeze the weights, train two thin matrices</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A full fine-tune updates every weight in the model, so you need memory for every weight, its gradient and its optimizer state, and you end up with a whole new copy of the model. Parameter-efficient fine-tuning (PEFT) leaves the original weights untouched and trains a small add-on. LoRA, from Hu et al. 2021 (arXiv:2106.09685), is the add-on almost everyone uses: it freezes the pre-trained weights and injects trainable rank decomposition matrices into each layer. That sentence sounds hard. The picture is not.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 392" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Input x splits into two paths. The upper path goes through the frozen d by d weight matrix W, giving Wx. The lower path goes through A, a short wide r by d matrix that projects down, then B, a tall thin d by r matrix that projects back up, then a scale of alpha over r. The two paths add to give the output h equals Wx plus alpha over r times BAx. B starts at zero, so the untrained adapter adds nothing.">
+        <defs>
+          <filter id="f4aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="43" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f4aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="f4aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f4aH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f4aL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f4aS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f4aB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f4aV { font: 800 18px Inter, sans-serif; fill: #3F3C06; }
+          .f4aA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f4aN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f4aH" x="30" y="24">ONE LAYER WITH LORA: THE FROZEN PATH AND THE TRAINABLE PATH ADD UP</text>
+
+        <g filter="url(#f4aSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="160" width="100" height="60" rx="8" transform="rotate(-1.5 80 190)" fill="#FFFFFF"/>
+          <path d="M134 178 C160 140 180 114 204 112" marker-end="url(#f4aAr)"/>
+          <rect x="210" y="58" width="140" height="110" rx="6" transform="rotate(-0.5 280 113)" fill="url(#f4aHc)"/>
+          <path d="M134 202 C160 240 180 260 204 261" marker-end="url(#f4aAr)"/>
+          <rect x="210" y="248" width="140" height="26" rx="4" transform="rotate(0.6 280 261)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M354 261 L396 261" marker-end="url(#f4aAr)"/>
+          <rect x="402" y="208" width="26" height="110" rx="4" transform="rotate(-0.8 415 263)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M432 263 L490 263" marker-end="url(#f4aAr)"/>
+          <circle cx="522" cy="263" r="28" fill="#FFFFFF"/>
+          <path d="M354 112 C480 112 600 130 628 172" marker-end="url(#f4aAr)"/>
+          <path d="M550 258 C590 254 618 236 632 210" marker-end="url(#f4aAr)"/>
+          <circle cx="642" cy="190" r="18" fill="#FBF7DC"/>
+          <path d="M662 190 L690 190" marker-end="url(#f4aAr)"/>
+          <rect x="696" y="160" width="160" height="60" rx="8" transform="rotate(1.2 776 190)" fill="#FFFFFF"/>
+        </g>
+
+        <text class="f4aL" x="80" y="186" text-anchor="middle">input x</text>
+        <text class="f4aS" x="80" y="204" text-anchor="middle">d values</text>
+        <text class="f4aL" x="280" y="50" text-anchor="middle">W · d x d</text>
+        <text class="f4aA" x="280" y="188" text-anchor="middle">frozen, no gradient</text>
+        <text class="f4aA" x="214" y="238">trainable: A and B only</text>
+        <text class="f4aB" x="280" y="296" text-anchor="middle">A · r x d · down</text>
+        <text class="f4aB" x="415" y="338" text-anchor="middle">B · d x r · up</text>
+        <text class="f4aS" x="415" y="354" text-anchor="middle">starts at zero</text>
+        <text class="f4aS" x="522" y="267" text-anchor="middle">alpha/r</text>
+        <text class="f4aL" x="470" y="102">Wx</text>
+        <text class="f4aL" x="568" y="290">(alpha/r)·BAx</text>
+        <text class="f4aV" x="642" y="196" text-anchor="middle">+</text>
+        <text class="f4aL" x="776" y="186" text-anchor="middle">output h</text>
+        <text class="f4aS" x="776" y="204" text-anchor="middle">Wx + (alpha/r)·BAx</text>
+
+        <text class="f4aN" x="30" y="378">B starts at zero, so the untrained adapter adds nothing. After training, merge: W + (alpha/r)BA.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the big matrix never moves; everything you train lives in the two thin strips beside it</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>The one equation, read as a picture<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Take one weight matrix W inside the model, d rows by d columns. Normally the layer computes Wx. LoRA adds a second path: A squeezes the d input values down to just r numbers, B expands those r numbers back up to d, and the result is scaled by alpha divided by r. The layer now computes h = Wx + (alpha/r)·BAx. W is frozen: no gradient, no optimizer state, no change. Only A and B train.</p>
+        <p>The "low rank" in the name is the width of that squeeze. If r is 16 and d is 3,072, the trainable path carries 16 numbers where the full matrix has 3,072 columns. The bet is that the change a narrow task needs is small and structured enough to pass through that narrow pipe. For Larkline's six queues, that is a reasonable bet; session 5 checks it.</p>
+        <p>One detail matters on day one. In the PEFT library, B is initialised to zero by default (<code>init_lora_weights=True</code>), so BAx is zero before training. A freshly attached adapter changes nothing: the model behaves exactly like the base until the first update. And because BA can be added into W after training, Hu et al. 2021 report no additional inference latency once merged, unlike earlier adapter designs that added extra layers.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>"10,000 times fewer parameters", read fairly<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The LoRA abstract says that compared with GPT-3 175B fine-tuned with Adam, LoRA reduces the number of trainable parameters by 10,000 times and the GPU memory requirement by 3 times, with quality on par or better on RoBERTa, DeBERTa, GPT-2 and GPT-3. Every part of that sentence is true, and it is true for that comparison.</p>
+        <p>The 10,000 figure depends on the size of the model and on r. On a 4B-class model with a larger r and more target modules, the ratio is much smaller (Part 2 works one matrix by hand). And notice the two numbers differ: trainable parameters fall by four orders of magnitude, memory by three times. The frozen weights still have to sit in GPU memory, and the activations still have to be computed. That gap is exactly why QLoRA exists (Part 3).</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The disagreement: LoRA learns less and forgets less<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Hu et al. 2021 report LoRA on par with or better than full fine-tuning on their tasks. Biderman et al. 2024, "LoRA Learns Less and Forgets Less" (arXiv:2405.09673), tested harder targets: on code and maths, LoRA substantially underperformed full fine-tuning in standard low-rank settings. They also found the other half of the trade: LoRA better maintained the base model's performance outside the target domain, and full fine-tuning learned weight changes of rank 10 to 100 times higher than typical LoRA settings.</p>
+        <p>Both papers are right in their settings, and neither settles your task. A routing task with six labels sits much closer to "learn a narrow behaviour" than to "learn a new programming skill", which favours LoRA, but that is a reason to expect, not a result. The honest plan is to measure two things after the tune: the target task, and what the model used to do well. Session 5 builds both checks.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>An adapter that starts as a no-op is a safety feature.</strong> Because the PEFT default sets B to zero, attaching a LoRA adapter to a production model and running your eval before training should reproduce the base model's scores exactly. If it does not, something in your pipeline is wrong (a different tokenizer, a different prompt template, a different decoding setting) and you have found it before spending a single GPU-hour.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers the LoraConfig knobs</span>
+      <h2>Six arguments, read against the docs</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A LoraConfig has many arguments and six that matter on day one. The Hugging Face PEFT reference gives each a default: <code>r</code> 8, <code>lora_alpha</code> 8, <code>target_modules</code> None (chosen by the model's architecture), <code>lora_dropout</code> 0.0, <code>bias</code> "none", and <code>use_rslora</code> False. Read them in that order and the config stops being a wall of numbers.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 310" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Horizontal bars of trainable values for one illustrative 3072 by 3072 matrix, computed as r times 6144. r equals 4 gives 24,576, 0.26 percent. r equals 8 gives 49,152, 0.52 percent. r equals 16 gives 98,304, 1.04 percent, highlighted. r equals 64 gives 393,216, 4.17 percent. The whole frozen matrix has 9,437,184 values.">
+        <defs>
+          <filter id="f4bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="47" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f4bH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f4bL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f4bS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f4bB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f4bV { font: 800 16px Inter, sans-serif; fill: #3F3C06; }
+          .f4bA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f4bN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f4bH" x="30" y="26">TRAINABLE VALUES FOR ONE 3072 x 3072 MATRIX (ILLUSTRATIVE SIZE): r x (3072 + 3072)</text>
+        <text class="f4bA" x="30" y="46">bar length to scale · percent of the 9,437,184 frozen values</text>
+
+        <g filter="url(#f4bSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="110" y="62" width="35" height="32" rx="4" transform="rotate(-0.8 127 78)" fill="#FBF7DC"/>
+          <rect x="110" y="112" width="70" height="32" rx="4" transform="rotate(0.6 145 128)" fill="#FBF7DC"/>
+          <rect x="110" y="162" width="140" height="32" rx="4" transform="rotate(-0.5 180 178)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="110" y="212" width="560" height="32" rx="4" transform="rotate(0.2 390 228)" fill="#FBF7DC"/>
+        </g>
+
+        <text class="f4bL" x="30" y="83">r = 4</text>
+        <text class="f4bL" x="30" y="133">r = 8</text>
+        <text class="f4bB" x="30" y="183">r = 16</text>
+        <text class="f4bL" x="30" y="233">r = 64</text>
+        <text class="f4bV" x="158" y="84">24,576</text>
+        <text class="f4bA" x="226" y="83">0.26%</text>
+        <text class="f4bV" x="193" y="134">49,152</text>
+        <text class="f4bA" x="261" y="133">0.52% · PEFT default r</text>
+        <text class="f4bV" x="263" y="184">98,304</text>
+        <text class="f4bB" x="331" y="183">1.04% · the build-along config</text>
+        <text class="f4bV" x="682" y="234">393,216</text>
+        <text class="f4bA" x="760" y="233">4.17%</text>
+
+        <text class="f4bN" x="30" y="272">At this scale the whole frozen matrix would be a bar about 13,400 px long.</text>
+        <text class="f4bN" x="30" y="292">The 3072 size is constructed for teaching; your model's real shapes will differ.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - doubling r doubles the trainable count; the frozen matrix dwarfs all four</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>r and lora_alpha: the size of the pipe and the volume knob<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>r</strong> is the rank, the width of the squeeze; the PEFT docs call it the "Lora attention dimension". For a d x d matrix, A has r x d values and B has d x r, so the trainable count is 2 x r x d and the trainable fraction is 2r/d. On an illustrative 3,072 x 3,072 matrix (a size picked for teaching, not read from any model card), r = 16 gives 98,304 of 9,437,184 values, 1.04 percent; the default r = 8 gives 0.52 percent.</p>
+        <p><strong>lora_alpha</strong> sets how loudly the adapter speaks. The adapter's output is multiplied by lora_alpha / r, so r = 16 with lora_alpha = 16 gives a scaling of exactly 1.0, and the default 8 / 8 also gives 1.0. Set <code>use_rslora=True</code> and the scaling becomes lora_alpha / sqrt(r) instead: for 16 / 16 that is 16 / 4 = 4.0. That is the rank-stabilised variant; the point to remember is that changing r silently changes the scaling unless you change alpha with it.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>target_modules, lora_dropout and bias<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>target_modules</strong> decides which matrices get an adapter. The default None lets PEFT choose by architecture. The string <code>"all-linear"</code> targets all linear layers except the output layer, which is a common, simple choice for small models: more matrices adapted, more trainable values, more capacity. The trainable fraction per matrix is still 2r/d; the total depends on how many matrices and their real shapes, which you read from the model, not from a slide.</p>
+        <p><strong>lora_dropout</strong> (default 0.0) randomly drops some of the adapter's input during training, a light regulariser for small datasets; 0.05 is a common small value. <strong>bias</strong> (default "none") says whether bias terms train too; leave it at "none" unless you have a reason. Neither changes the memory picture much. Both are worth writing on the run card, because "I changed dropout" is a classic reason two runs disagree.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why adapters run a hotter learning rate<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The TRL SFTTrainer docs include a tip: adapters typically use a higher learning rate, about 1e-4. The SFTConfig default is 2e-5, set for full fine-tuning, along with 3.0 epochs. If you attach a LoRA config and forget to raise the rate, the run may learn very little and you may wrongly conclude LoRA "does not work" on your task.</p>
+        <p>Treat 1e-4 as the docs' starting point, not a tuned value. The rate that works for Larkline is whatever gives the best held-out score in session 5, and that search costs runs, which is why the run card exists.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Two defaults that disagree.</strong> The TRL documentation's own SFTConfig default learning rate is 2e-5, while its PEFT tip says adapters typically use about 1e-4, five times higher. Neither is wrong: one default serves full fine-tuning, the other is advice for adapters. The lesson travels to every library: read the tip next to the default, and write the value you actually used on the run card.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers QLoRA and GPU memory</span>
+      <h2>QLoRA: the same adapter on a 4-bit base</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">LoRA shrinks what trains, but the frozen base still has to sit in GPU memory at 16 bits. QLoRA, from Dettmers et al. 2023 (arXiv:2305.14314), stores the frozen base in 4 bits instead and trains a LoRA adapter on top. The paper's headline: a 65B model fine-tuned on a single 48 GB GPU while preserving 16-bit task performance. For a 4B-class model, the same idea moves the tune from "needs a big card" to "fits on a modest one".</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 402" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Paired bars of Unsloth's minimum VRAM for QLoRA 4-bit and LoRA 16-bit. 3B: 3.5 and 8 GB. 8B: 6 and 22 GB. 14B: 8.5 and 33 GB. 70B: 41 and 164 GB. A line at 24 GB marks an L4 and a line at 80 GB marks an A100 or H100. Every QLoRA bar up to 14B sits far under the L4 line; 8B in 16-bit only just clears it.">
+        <defs>
+          <filter id="f4cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f4cH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f4cL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f4cS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f4cB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f4cV { font: 800 16px Inter, sans-serif; fill: #3F3C06; }
+          .f4cA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f4cN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f4cH" x="30" y="26">MINIMUM VRAM TO TUNE, READ FROM UNSLOTH'S TABLE: QLORA 4-BIT AGAINST LORA 16-BIT</text>
+        <text class="f4cB" x="50" y="51">QLoRA 4-bit</text>
+        <text class="f4cS" x="170" y="51">LoRA 16-bit</text>
+        <text class="f4cA" x="300" y="51">GB, absolute minimum · 1.5 px per GB</text>
+
+        <g filter="url(#f4cSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="41" width="14" height="12" rx="2" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="150" y="41" width="14" height="12" rx="2" fill="#FBF7DC"/>
+          <path d="M90 330 L790 330"/>
+          <path d="M90 294 L790 294" stroke="#1F4A7C" stroke-dasharray="6 5"/>
+          <path d="M90 210 L790 210" stroke-dasharray="6 5"/>
+          <rect x="116" y="325" width="40" height="5" rx="1" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="164" y="318" width="40" height="12" rx="2" fill="#FBF7DC"/>
+          <rect x="296" y="321" width="40" height="9" rx="2" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="344" y="297" width="40" height="33" rx="2" fill="#FBF7DC"/>
+          <rect x="476" y="317" width="40" height="13" rx="2" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="524" y="280" width="40" height="50" rx="2" fill="#FBF7DC"/>
+          <rect x="656" y="268" width="40" height="62" rx="2" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="704" y="84" width="40" height="246" rx="2" fill="#FBF7DC"/>
+        </g>
+
+        <text class="f4cB" x="796" y="291">L4</text>
+        <text class="f4cS" x="796" y="306">24 GB</text>
+        <text class="f4cL" x="796" y="206">80 GB card</text>
+        <text class="f4cS" x="796" y="222">A100 / H100</text>
+
+        <text class="f4cV" x="136" y="317" text-anchor="middle">3.5</text>
+        <text class="f4cV" x="184" y="310" text-anchor="middle">8</text>
+        <text class="f4cV" x="316" y="313" text-anchor="middle">6</text>
+        <text class="f4cV" x="364" y="289" text-anchor="middle">22</text>
+        <text class="f4cV" x="496" y="309" text-anchor="middle">8.5</text>
+        <text class="f4cV" x="544" y="272" text-anchor="middle">33</text>
+        <text class="f4cV" x="676" y="260" text-anchor="middle">41</text>
+        <text class="f4cV" x="724" y="76" text-anchor="middle">164</text>
+
+        <text class="f4cL" x="160" y="350" text-anchor="middle">3B</text>
+        <text class="f4cL" x="340" y="350" text-anchor="middle">8B</text>
+        <text class="f4cL" x="520" y="350" text-anchor="middle">14B</text>
+        <text class="f4cL" x="700" y="350" text-anchor="middle">70B</text>
+
+        <text class="f4cN" x="30" y="374">Unsloth's own words: "the absolute minimum". Batch size 1-3 keeps you near these numbers.</text>
+        <text class="f4cN" x="30" y="392">7B and 32B rows omitted from the drawing; no 4B row exists, so 4B sits between 3B and 7B.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - at 4 bits every model up to 14B fits an L4 with room to spare; at 16 bits, 8B already leaves almost none</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Three tricks: NF4, double quantisation, paged optimisers<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>4-bit NormalFloat (NF4)</strong> is a 4-bit data type designed for weights that are roughly normally distributed, which pre-trained weights tend to be. It stores the frozen base at a quarter of 16-bit size (0.5 bytes per parameter against 2, the arithmetic from session 2). <strong>Double quantisation</strong> quantises the small scaling constants that 4-bit storage itself needs, saving a little more. <strong>Paged optimisers</strong> move optimizer state between GPU and CPU memory when a spike would otherwise run the GPU out of memory.</p>
+        <p>The adapter itself still trains in higher precision; only the frozen base is stored in 4 bits. That is why QLoRA can preserve 16-bit task performance in the paper's experiments: the part that learns is not the part that was squeezed.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Reading a memory table honestly<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Unsloth's requirements page gives minimum VRAM for QLoRA 4-bit and LoRA 16-bit: 3B 3.5 / 8 GB, 7B 5 / 19, 8B 6 / 22, 14B 8.5 / 33, 32B 26 / 76, 70B 41 / 164. It calls them "the absolute minimum" and suggests a batch size of 1 to 3 to use less VRAM. So a row is a floor at a small batch, not a comfortable working size. Longer sequences and larger batches push activations up.</p>
+        <p>Two more cautions. The table belongs to one library; other stacks use different amounts. And TRL's docs report Unsloth as "up to 2x faster with up to 70% less VRAM": that is a vendor claim quoted by TRL, reported, not something we measured. The <a href="https://phoebefu6.github.io/learn-hermes-ai-with-phoebe/courses/94-fine-tune-your-own.html">Fine-tune your own Hermes walk-through ↗</a> runs Unsloth on Colab step by step; tonight we only read its numbers.</p>
+        <p>For prices to set beside the table: Hugging Face Inference Endpoints list an L4 24 GB at $0.80 per hour and an A100 80 GB at $2.50, H100 80 GB at $4.50 (list price read 2026-11-08, re-verify). Session 6 turns those into a monthly bill.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>Guanaco, and the sentence people quote wrongly.</strong> The QLoRA paper reports that its Guanaco models reached 99.3 percent of ChatGPT's performance level on the Vicuna benchmark after 24 hours of fine-tuning on a single GPU. That is one benchmark, scored the way the paper scored it. It shows a 4-bit-base tune can be strong on that test; it does not show that a 4-bit model equals ChatGPT, and it says nothing about claim triage. Your eval is the only benchmark that answers Larkline's question.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>Read a LoRA config and estimate memory</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya has a draft config and a training snippet. Nothing gets run tonight: the code is for reading, and every number on this page is either read from the docs or computed by hand in front of you. Work through the six steps with Priya, then repeat them for the model on your own shortlist. Your numbers will differ.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Left, a stack of four memory items for a QLoRA tune: base weights in 4-bit NF4, frozen, at the bottom; then the LoRA adapter A and B; then optimizer state for the adapter only; then activations on top. Shares are not to scale. Right, a 24 GB L4 drawn as a tall frame. At its bottom sits the QLoRA 4B-class read range, 3.5 to 5 GB, highlighted. A dashed line marks 16-bit LoRA at up to 19 GB. The space between is headroom for batch and sequence length.">
+        <defs>
+          <filter id="f4dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="59" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f4dHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+        </defs>
+        <style>
+          .f4dH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f4dL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f4dS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f4dB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f4dA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f4dN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f4dH" x="30" y="26">PRIYA'S MEMORY BUDGET (CONSTRUCTED LARKLINE EXAMPLE): WHAT ADDS UP, AND DOES IT FIT</text>
+
+        <g filter="url(#f4dSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="84" width="240" height="56" rx="6" transform="rotate(-0.6 160 112)" fill="#FBF7DC"/>
+          <rect x="40" y="146" width="240" height="34" rx="6" transform="rotate(0.5 160 163)" fill="#FFFFFF"/>
+          <rect x="40" y="186" width="240" height="22" rx="6" transform="rotate(-0.4 160 197)" fill="#FFFFFF"/>
+          <rect x="40" y="214" width="240" height="78" rx="6" transform="rotate(0.3 160 253)" fill="url(#f4dHc)"/>
+          <rect x="620" y="50" width="220" height="270" rx="8" transform="rotate(0.4 730 185)" fill="#FFFFFF"/>
+          <path d="M636 106 L824 106" stroke-dasharray="6 5"/>
+          <rect x="636" y="262" width="188" height="52" rx="6" fill="#FFF5C4" stroke="#1F4A7C"/>
+        </g>
+
+        <text class="f4dL" x="296" y="108">activations</text>
+        <text class="f4dS" x="296" y="123">grow with batch size and sequence length</text>
+        <text class="f4dL" x="296" y="160">optimizer state</text>
+        <text class="f4dS" x="296" y="175">adapter only; paged when it spikes</text>
+        <text class="f4dL" x="296" y="201">LoRA adapter A, B · trainable</text>
+        <text class="f4dL" x="296" y="248">base weights · 4-bit NF4</text>
+        <text class="f4dS" x="296" y="263">frozen; about 0.5 bytes per parameter</text>
+        <text class="f4dA" x="40" y="316">sum = the table's minimum, not four read numbers</text>
+
+        <text class="f4dH" x="620" y="44">L4 · 24 GB</text>
+        <text class="f4dS" x="730" y="98" text-anchor="middle">16-bit LoRA: 8 to 19 GB</text>
+        <text class="f4dA" x="730" y="190" text-anchor="middle">headroom for batch, length</text>
+        <text class="f4dB" x="730" y="283" text-anchor="middle">QLoRA 4B-class</text>
+        <text class="f4dS" x="730" y="301" text-anchor="middle">3.5 to 5 GB (read range)</text>
+
+        <text class="f4dN" x="30" y="344">Shares not to scale; only the Unsloth total is read. 4B sits between the 3B and 7B rows.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - you cannot read the four slices off any table, but you can read their sum, and that sum fits an L4 several times over</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Read each argument against the docs, line by line.</strong> Write the default beside each value and say why it moved. The training snippet is for reading only: no output is shown because none was produced.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · read the config</span>from peft import LoraConfig
+from trl import SFTTrainer, SFTConfig
+
+peft_config = LoraConfig(
+    r=16,                         # default 8: twice the rank
+    lora_alpha=16,                # default 8: scaling 16/16 = 1.0
+    target_modules="all-linear",  # default None: all linear layers
+                                  #   except the output layer
+    lora_dropout=0.05,            # default 0.0: light regulariser
+    bias="none",                  # default "none": unchanged
+    task_type="CAUSAL_LM",
+)
+
+trainer = SFTTrainer(
+    model="&lt;base model id from session 2&gt;",
+    train_dataset=train_ds,       # session 3's cleaned split
+    peft_config=peft_config,
+    args=SFTConfig(
+        learning_rate=1e-4,       # default 2e-5; TRL tip: ~1e-4
+        output_dir="larkline-triage-lora",
+    ),                            # epochs left at default 3.0
+)</div>
+      </div>
+      <div class="step">
+        <p><strong>Compute the trainable fraction for one matrix by hand.</strong> Use the illustrative 3,072 x 3,072 size and say out loud that it is illustrative. The per-matrix fraction is 2r/d whatever the model; the total across "all-linear" needs the model's real shapes.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · trainable fraction</span>Matrix:     3,072 x 3,072 (constructed size)  = 9,437,184 values
+A + B:      r x (3,072 + 3,072) = 16 x 6,144  =    98,304 values
+Fraction:   98,304 / 9,437,184                =     1.04%
+Check:      2r/d = 32 / 3,072                 =     1.04%
+At r=8:     49,152 values                     =     0.52%</div>
+      </div>
+      <div class="step">
+        <p><strong>Pick QLoRA or 16-bit LoRA from the table, without inventing a row.</strong> Larkline's shortlist is a 4B-class model. Unsloth has no 4B row, so read the two rows either side and give a range.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · pick the method</span>Model size:   4B-class (between the 3B and 7B rows)
+QLoRA 4-bit:  3B 3.5 GB  -&gt;  7B 5 GB    so roughly 3.5 to 5 GB
+LoRA 16-bit:  3B 8 GB    -&gt;  7B 19 GB   so roughly 8 to 19 GB
+Both are "the absolute minimum" at batch size 1-3.
+Pick:         QLoRA for the first runs; 16-bit LoRA only if
+              session 5 shows a quality gap worth paying for.</div>
+      </div>
+      <div class="step">
+        <p><strong>Check the fit against a real card, with headroom.</strong> A minimum is not a plan. Leave room for longer claim notes and a slightly bigger batch.</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · does it fit an L4</span>Card:        L4, 24 GB ($0.80/h on HF Inference Endpoints,
+             list price read 2026-11-08, re-verify)
+QLoRA:       3.5 to 5 GB minimum  -&gt; ample headroom
+16-bit LoRA: 8 to 19 GB minimum   -&gt; fits, but the upper end
+             leaves about 5 GB, and that is the absolute floor
+Verdict:     QLoRA on one L4 is the comfortable first plan.</div>
+      </div>
+      <div class="step">
+        <p><strong>Decide what ships: the merged model, the adapter, and the base beside it.</strong> Merging folds (alpha/r)BA into W so serving adds no latency. Keeping the untouched base model next to the adapter lets you compare, roll back, and re-train when the queues change. The <a href="https://phoebefu6.github.io/learn-hermes-ai-with-phoebe/courses/94-fine-tune-your-own.html">Hermes walk-through ↗</a> gives the same advice: keep the stock model beside the tune.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · what to keep</span>Keep:    the base model, unchanged, pinned by exact id and revision
+Keep:    the adapter (A and B) as its own small artefact
+Serve:   a merged copy W + (alpha/r)BA for production
+Why:     roll back = point serving at the base again;
+         re-train  = new adapter on the same base, compare both.</div>
+      </div>
+      <div class="step">
+        <p><strong>Write the run card before the first run.</strong> One page that lets anyone, including you in three months, rebuild the exact tune and know which eval judged it.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · the run card</span>Run:            larkline-triage-lora, run 001 (constructed)
+Base model:     &lt;id&gt; @ &lt;revision&gt;, loaded 4-bit NF4 (QLoRA)
+LoRA:           r=16, alpha=16 (scaling 1.0), all-linear,
+                dropout 0.05, bias none, rsLoRA off
+Trainer:        TRL SFTTrainer, lr 1e-4, epochs 3.0, batch &lt;n&gt;
+Data version:   train split v&lt;x&gt; from session 3, &lt;rows&gt; rows
+Eval set:       held-out v&lt;y&gt;, never trained on (session 5)
+Hardware:       1 x L4 24 GB
+Results:        filled in after the run, not before</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Tom's answer fits in two sentences.</strong> "We change nothing in the model itself; we train a small add-on of roughly one percent per adapted matrix, and keep the original beside it. The published minimum for this size of model is a few gigabytes at 4 bits, so one 24 GB L4 is enough to start, and session 5 tells us whether it was worth it."</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 5</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Annotate a real config.</strong> Find a LoraConfig in a public notebook or repo, write the PEFT default beside every argument, and compute its scaling with and without rsLoRA.</li>
+      <li><strong>Work the fraction for your model.</strong> Read one real linear layer's shape from your shortlisted model's config file, then compute 2r/d (or r x (in + out) for a non-square matrix) at r = 8 and r = 16.</li>
+      <li><strong>Place your model in the Unsloth table.</strong> Find the two rows either side, give a QLoRA and a 16-bit range, and say which card you would rent and why.</li>
+      <li><strong>Fill in a run card</strong> for your own task with every field from step 6, leaving Results empty. Session 5 fills that line.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and session 4 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · In PEFT's default LoRA setup, B is initialised to zero. What does that mean for a freshly attached, untrained adapter?</p>
+      <button class="qopt" type="button">A · The model outputs zeros until training starts</button>
+      <button class="qopt" type="button">B · BAx is zero, so the model behaves exactly like the base until the first update</button>
+      <button class="qopt" type="button">C · The frozen weights W are reset to zero as well</button>
+      <button class="qopt" type="button">D · Training cannot start, because a zero matrix has no gradient</button>
+      <p class="qwhy">With B at zero, the adapter path adds nothing, so h = Wx exactly. That makes the adapter a safe no-op on day one and a quick pipeline check: the base and the untrained adapter should score the same. A gets small random values, so gradients still flow into B from the first step.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">2 · A config sets r=16 and lora_alpha=16. What scaling does the adapter's output get, and what changes with use_rslora=True?</p>
+      <button class="qopt" type="button">A · 16 either way; rsLoRA only changes the learning rate</button>
+      <button class="qopt" type="button">B · 0.25 by default; rsLoRA makes it 1.0</button>
+      <button class="qopt" type="button">C · 256, because alpha and r multiply</button>
+      <button class="qopt" type="button">D · 1.0 (alpha/r); with rsLoRA it becomes alpha/sqrt(r) = 16/4 = 4.0</button>
+      <p class="qwhy">The PEFT docs give the scaling as lora_alpha/r by default and lora_alpha/sqrt(r) when use_rslora is True. Writing the scaling on the run card stops a quiet change of r from also changing how loudly the adapter speaks.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · A colleague says "LoRA cuts trainable parameters by 10,000 times, so our tune will be tiny." What is the fair reading?</p>
+      <button class="qopt" type="button">A · True for every model at every rank</button>
+      <button class="qopt" type="button">B · False; the LoRA paper reports no such number</button>
+      <button class="qopt" type="button">C · It is the paper's comparison for GPT-3 175B against full fine-tuning with Adam; on a small model with a bigger r and more modules, the ratio is far smaller</button>
+      <button class="qopt" type="button">D · It means GPU memory also falls by 10,000 times</button>
+      <p class="qwhy">Hu et al. 2021 report 10,000 times fewer trainable parameters and 3 times less GPU memory, for that one comparison. The ratio depends on model size, r and target modules, and memory falls far less because the frozen base and activations still sit on the GPU.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Hu et al. 2021, LoRA (arXiv:2106.09685)</span><span class="note">Frozen weights plus trainable rank decomposition matrices; 10,000 times fewer trainable parameters and 3 times less memory against GPT-3 175B with Adam; no added inference latency once merged. Abstract read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Dettmers et al. 2023, QLoRA (arXiv:2305.14314)</span><span class="note">NF4, double quantisation, paged optimisers; 65B on one 48 GB GPU; Guanaco at 99.3 percent of ChatGPT on the Vicuna benchmark, one benchmark. Abstract read at source</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Hugging Face PEFT LoraConfig reference</span><span class="note">Defaults for r, lora_alpha, target_modules, lora_dropout, bias, use_rslora and init_lora_weights (B at zero); read at source 2026-11-08, re-verify before delivery</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Hugging Face TRL SFTTrainer docs</span><span class="note">peft_config, the adapter learning-rate tip (about 1e-4), SFTConfig defaults 2e-5 and 3.0 epochs; read at source 2026-11-08, re-verify</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Unsloth requirements</span><span class="note">Minimum VRAM table for QLoRA 4-bit and LoRA 16-bit, "the absolute minimum", batch size 1-3; the speed and VRAM claim is reported via TRL</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Biderman et al. 2024 (arXiv:2405.09673)</span><span class="note">LoRA learns less and forgets less: underperforms full fine-tuning on code and maths, holds out-of-domain performance better. Abstract read at source</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">learn-hermes-ai 94, Fine-tune your own</span><span class="note">Linked, not retaught: the Unsloth-on-Colab walk-through and the advice to keep the stock model beside the tune</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Larkline, Priya, Tom and every Larkline number</span><span class="note">Constructed for teaching; the 3,072 matrix size is illustrative and no number about Larkline is a measurement</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 4 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>The equation</b><span>h = Wx + (alpha/r)·BAx. W frozen; only A (r x d) and B (d x r) train.</span></div>
+      <div class="cheat-item"><b>B starts at zero</b><span>An untrained adapter is a no-op: base and adapter should score the same before training.</span></div>
+      <div class="cheat-item"><b>Trainable fraction</b><span>2r/d per square matrix. r=16 on 3,072 x 3,072 (illustrative): 1.04 percent.</span></div>
+      <div class="cheat-item"><b>Scaling</b><span>alpha/r by default (16/16 = 1.0); alpha/sqrt(r) with rsLoRA. Change r, check alpha.</span></div>
+      <div class="cheat-item"><b>QLoRA</b><span>4-bit NF4 frozen base, double quantisation, paged optimisers; the adapter still trains in higher precision.</span></div>
+      <div class="cheat-item"><b>Memory</b><span>Read the minimum from a published table, give a range when your size has no row, leave headroom.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>A tune that fits on the card is not yet a tune worth shipping. Session 5 scores the big model, the small base and the tuned adapter on the same held-out set, queue by queue, and checks what the tune made the model forget.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Session 4 of 6 · learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="03-building-the-training-set.html">← Prev: The training set</a> &nbsp;·&nbsp; <a href="05-evals-before-and-after.html">Next: Evals before and after →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

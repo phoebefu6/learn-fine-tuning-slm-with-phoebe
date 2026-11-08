@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 5 of 6. A tune is only better if it beats the baseline on the same frozen held-out set. Three arms scored on 600 real customer messages, accuracy against per-queue recall and macro-F1, the confusion row that hides the urgent queue, catastrophic forgetting and the regression set that catches it.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Evals before and after the tune - learn fine-tuning slm with phoebe">
+<meta property="og:description" content="Session 5 of 6. Baseline first, per-queue recall, and a regression set for what the tune might forget.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/courses/05-evals-before-and-after.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Evals before and after the tune - learn fine-tuning slm with phoebe">
+<meta name="twitter:description" content="Session 5 of 6. Same frozen set, three arms, per-queue recall, and a regression set.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 5 · Evals before and after the tune - learn fine-tuning slm with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-fine-tuning-slm-with-phoebe</a> / Session 5 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Fine-tuning and Small Language Models with Phoebe · Session 5 of 6</div>
+    <h1>Evals <span class="accent">before and after</span> the tune</h1>
+    <p class="sub">A tuned model is not better because its training loss went down. It is better if it beats the thing it would replace, on the same frozen set of examples it never saw, on every part of the task that matters, without breaking anything it used to do. Tonight we score three arms on 600 real customer messages, read past the headline accuracy to the queue that carries the risk, and add the regression set that catches what a tune forgets.</p>
+    <div class="chip-row">
+      <span class="chip level">🟠 Deeper</span>
+      <span class="chip audience">Builders who will sign off a tune</span>
+      <span class="chip audience">Uses the session 6 bench</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:4">3-18 · Baseline, per-queue, forgetting</span>
+      <span class="a3" style="flex:5">18-40 · Build-along: the before-and-after table</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya has labelled a held-out set, cleaned and split the history (session 3) and trained a LoRA adapter on a 4-billion-parameter-class open model (session 4). Tom, the claims operations lead, asks the only question that matters to him: is it better than what we have? Tonight's numbers come from the bench in session 6: 600 real customer messages from Banking77 (PolyAI, CC BY 4.0) mapped to six queues, standing in for Larkline's claim notes. The labels are real; the three arms' predictions are modelled by a seeded rule; every metric is computed from them.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">Live = presented in the 45 minutes</span>
+      <span class="pill">Self-study = the full depth, after class</span>
+      <span class="pill">★ Build-along = do it yourself</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A rule for what the baseline is and when it is scored, a habit of reading per-queue recall before the headline, a written pass condition for each queue set before the tune runs, and a regression set for the behaviours the tune must not lose.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the held-out set and the baseline</span>
+      <h2>One frozen set, three arms, one scorer</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">An eval compares like with like. The held-out set is frozen before any tuning and never enters training. The baseline is the system you would replace, the big model with its prompt, scored on that same set by the same scorer. The small model with the prompt only is the third arm: it shows how much of the gain the tune itself bought.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A frozen held-out set of 600 rows feeds three arms: the big API model with a prompt, the small model with a prompt only, and the small model after a LoRA tune. All three feed the same scorer on the same 600 rows, which gives accuracy of 91.0 percent for the big model, 74.2 percent for the small model before tuning, and 94.3 percent after tuning.">
+        <defs>
+          <filter id="f5aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="51" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f5aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="f5aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f5aH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f5aL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f5aS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f5aB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f5aV { font: 800 16px Inter, sans-serif; fill: #3F3C06; }
+          .f5aN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f5aH" x="30" y="26">LIKE WITH LIKE: THE SAME FROZEN ROWS, THE SAME SCORER, THREE ARMS</text>
+
+        <g filter="url(#f5aSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="90" width="140" height="120" rx="8" transform="rotate(-1 100 150)" fill="url(#f5aHc)"/>
+          <path d="M176 140 C210 110 230 90 254 82" marker-end="url(#f5aAr)"/>
+          <path d="M176 150 L254 150" marker-end="url(#f5aAr)"/>
+          <path d="M176 160 C210 190 230 210 254 220" marker-end="url(#f5aAr)"/>
+          <rect x="260" y="56" width="230" height="48" rx="8" transform="rotate(-0.6 375 80)" fill="#FFFFFF"/>
+          <rect x="260" y="126" width="230" height="48" rx="8" transform="rotate(0.5 375 150)" fill="#FFFFFF"/>
+          <rect x="260" y="196" width="230" height="48" rx="8" transform="rotate(-0.5 375 220)" fill="#FBF7DC"/>
+          <path d="M494 80 C520 90 540 110 556 128" marker-end="url(#f5aAr)"/>
+          <path d="M494 150 L554 150" marker-end="url(#f5aAr)"/>
+          <path d="M494 220 C520 210 540 190 556 172" marker-end="url(#f5aAr)"/>
+          <rect x="560" y="110" width="120" height="80" rx="10" transform="rotate(0.8 620 150)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M684 150 L714 150" marker-end="url(#f5aAr)"/>
+          <rect x="720" y="70" width="140" height="160" rx="10" transform="rotate(-0.6 790 150)" fill="#FBF7DC"/>
+        </g>
+
+        <text class="f5aL" x="100" y="234" text-anchor="middle">held-out set</text>
+        <text class="f5aS" x="100" y="250" text-anchor="middle">frozen before tuning</text>
+        <text class="f5aL" x="276" y="76">Big API model + prompt</text>
+        <text class="f5aS" x="276" y="92">the baseline you replace</text>
+        <text class="f5aL" x="276" y="146">Small model, prompt only</text>
+        <text class="f5aS" x="276" y="162">the tune's starting point</text>
+        <text class="f5aL" x="276" y="216">Small model, LoRA-tuned</text>
+        <text class="f5aS" x="276" y="232">the candidate</text>
+        <text class="f5aB" x="620" y="146" text-anchor="middle">same scorer</text>
+        <text class="f5aS" x="620" y="164" text-anchor="middle">same 600 rows</text>
+        <text class="f5aV" x="734" y="110">91.0%</text>
+        <text class="f5aS" x="800" y="110">big</text>
+        <text class="f5aV" x="734" y="158">74.2%</text>
+        <text class="f5aS" x="800" y="158">small</text>
+        <text class="f5aV" x="734" y="206">94.3%</text>
+        <text class="f5aS" x="800" y="206">tuned</text>
+
+        <text class="f5aN" x="30" y="286">Accuracy on 600 real Banking77 rows; predictions modelled, counting computed (the session 6 bench).</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - three numbers are comparable only because the rows and the scorer did not move between them</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Score the baseline before you tune<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The baseline is scored first, on the frozen set, before a single training step. Two reasons. It tells you the bar: the big model with its prompt routes 546 of the 600 rows correctly, 91.0 percent, so a tune that reaches 90 percent is a step backwards, however good 90 sounds. And it removes the temptation to choose the eval after seeing the tuned model's results, which is the eval equivalent of drawing the target around the arrow.</p>
+        <p>How to build the frozen set properly, a golden set with coverage of the hard cases, is taught in <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/courses/b2-golden-set.html">Learn AI Evals, the golden set ↗</a>. Here it is enough that it was labelled by people, frozen, and kept out of training.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The third arm says what the tune bought<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The small model with the prompt alone reaches 74.2 percent. After the tune, 94.3 percent. That 20-point gap is the tune's contribution; the gap between 74.2 and the big model's 91.0 is what size buys without any tuning. Report all three. A tuned-against-big comparison alone hides how weak the starting point was; a tuned-against-untuned comparison alone hides whether you beat what you would replace.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The eval that was in the training data.</strong> Banking77, the public dataset behind these rows, has 7 test texts that also appear verbatim in its training split (session 3 found them by normalising case and spacing). A model trained on the full training split has seen those 7 answers. On a well-known public benchmark the effect is small; on a hand-built company set, where the same customer message is often logged twice, it can be most of your "improvement". Check overlap before you trust any after-number.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers per-class metrics and the confusion matrix</span>
+      <h2>Read the queue that carries the risk</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">Accuracy is one number for six queues of different sizes and different stakes. Recall per queue asks how many of that queue's messages reached the right desk. Macro-F1 averages each queue's balance of recall and precision with equal weight, so a small queue counts as much as a big one. On the bench, the tuned model wins on accuracy and macro-F1 and loses on the urgent queue.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 290" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The 57 Fraud and loss rows among the 600, drawn as one bar per arm split by where each row was routed. The big model sends 56 to Fraud and loss and 1 to Cards, a recall of 98.2 percent. The tuned small model sends 48 to Fraud and loss, 4 to Cards, 4 to Top-ups and cash and 1 to Payments and fees, a recall of 84.2 percent.">
+        <defs>
+          <filter id="f5bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="53" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f5bH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f5bL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f5bS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f5bB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f5bA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f5bN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f5bH" x="30" y="26">ONE ROW OF THE CONFUSION MATRIX: WHERE THE 57 FRAUD AND LOSS MESSAGES WENT</text>
+
+        <g filter="url(#f5bSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="260" y="70" width="471" height="34" rx="4" fill="#E8DE8C"/>
+          <rect x="731" y="70" width="9" height="34" rx="2" fill="#FFFFFF"/>
+          <rect x="260" y="150" width="404" height="34" rx="4" fill="#E8DE8C"/>
+          <rect x="664" y="150" width="34" height="34" rx="3" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="698" y="150" width="34" height="34" rx="3" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="732" y="150" width="9" height="34" rx="2" fill="#FFF5C4" stroke="#1F4A7C"/>
+        </g>
+
+        <text class="f5bL" x="240" y="92" text-anchor="end">Big + prompt</text>
+        <text class="f5bL" x="240" y="172" text-anchor="end">Small, LoRA-tuned</text>
+        <text class="f5bL" x="274" y="92">56 to Fraud and loss · recall 98.2%</text>
+        <text class="f5bS" x="752" y="92">1 to Cards</text>
+        <text class="f5bL" x="274" y="172">48 to Fraud and loss · recall 84.2%</text>
+        <text class="f5bB" x="681" y="172" text-anchor="middle">4</text>
+        <text class="f5bB" x="715" y="172" text-anchor="middle">4</text>
+        <text class="f5bB" x="740" y="210" text-anchor="end">misrouted: 4 to Cards · 4 to Top-ups · 1 to Payments</text>
+        <text class="f5bA" x="260" y="240">width = rows; 57 Fraud and loss rows in the 600</text>
+
+        <text class="f5bN" x="30" y="272">Same 57 rows, same scorer. The tune's 94.3% overall hides 9 urgent messages sent to slow queues.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - an urgent message routed to the cards desk is the error accuracy averages away</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Recall, precision, macro-F1 in one minute each<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>Recall</strong> for a queue: of the messages that belong there, the share that got there. Read it as "how many urgent claims did we catch". <strong>Precision</strong> for a queue: of the messages routed there, the share that belonged. Read it as "how much of the urgent desk's time goes on non-urgent work". <strong>Macro-F1</strong>: for each queue, F1 balances the two; macro averages the six with equal weight. On the bench the tuned model's macro-F1 is 0.936 against the big model's 0.910, and the untuned small model's 0.736.</p>
+        <p>Each metric answers a different operational question, so decide which one guards each queue before the tune runs. For Larkline, the urgent queue is guarded by recall, because a missed fraud claim costs far more than a few extra messages on the urgent desk.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Why a tune can make the rare queue worse<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A tune learns from the history it is given, and history is imbalanced. In Banking77's training split the six queues carry 860, 2,237, 1,581, 2,336, 1,976 and 1,013 rows, with Fraud and loss the smallest. The bench's predictions are modelled, but they are modelled on this familiar shape: the tuned arm improves the big queues and slips on the small urgent one. The fixes are on the data side, more and better urgent examples, and on the decision side, a recall floor for that queue that the tune must clear.</p>
+        <p>Routing is an exact-match task, so no judge model is needed to score it. When an output is free text, a summary or a reply, the scorer itself becomes a model, and calibrating it is its own discipline: <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/courses/b5-llm-as-judge.html">Learn AI Evals, LLM-as-judge ↗</a>.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers catastrophic forgetting and the regression set</span>
+      <h2>What the tune might forget</h2>
+      <span class="tag concept">5 min live</span>
+    </div>
+    <p class="lede">A tune optimises the task in its training data. Anything else the model did, and that you relied on without writing it down, can drift: the output format, a refusal, a language, a rule. That loss of earlier behaviour is called catastrophic forgetting, and the defence is a regression set, a fixed list of behaviours the tuned model must still show, scored on every candidate.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two panels. Left, wrong way: score only the target task. The tuned model's 94.3 percent ships, and nobody checks whether it still returns valid JSON, still never replies to the customer, or still routes notes in other languages. Right, right way: add a regression set. The same tune is scored on routing and on the three kept behaviours, and any drop blocks release.">
+        <defs>
+          <filter id="f5cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="57" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f5cH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f5cL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f5cS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f5cB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f5cR { font: 800 11px Inter, sans-serif; fill: #991B1B; }
+          .f5cN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f5cH" x="30" y="26">SCORE THE TASK, AND THE BEHAVIOURS THE TASK DEPENDS ON (CONSTRUCTED LARKLINE LIST)</text>
+
+        <g filter="url(#f5cSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="50" width="390" height="190" rx="12" transform="rotate(-0.4 235 145)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="450" y="50" width="390" height="190" rx="12" transform="rotate(0.4 645 145)" fill="#FFF5C4" stroke="#1F4A7C"/>
+        </g>
+
+        <text class="f5cL" x="58" y="84">✗ Score only the target task</text>
+        <text class="f5cS" x="58" y="114">routing accuracy 94.3%: ship it</text>
+        <text class="f5cR" x="58" y="144">never checked:</text>
+        <text class="f5cS" x="58" y="164">· valid JSON on every reply</text>
+        <text class="f5cS" x="58" y="184">· never answers the customer</text>
+        <text class="f5cS" x="58" y="204">· routes notes in other languages</text>
+        <text class="f5cL" x="468" y="84">✓ Add a regression set</text>
+        <text class="f5cS" x="468" y="114">routing: the 600-row held-out set</text>
+        <text class="f5cB" x="468" y="144">kept behaviours, scored every run:</text>
+        <text class="f5cS" x="468" y="164">· JSON parses: must stay at 100%</text>
+        <text class="f5cS" x="468" y="184">· no customer-facing reply: 100%</text>
+        <text class="f5cS" x="468" y="204">· non-English notes: no drop from baseline</text>
+
+        <text class="f5cN" x="30" y="274">Any kept behaviour that drops blocks the release, whatever the headline accuracy says.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - a regression set turns "it seems fine" into a list someone can fail</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Forgetting, and what LoRA does about it<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Biderman and colleagues (2024), in a paper titled "LoRA Learns Less and Forgets Less", compared LoRA with full fine-tuning on code and maths. In standard low-rank settings LoRA substantially underperformed full fine-tuning on the target domain, and better maintained the base model's performance on tasks outside it. That is a trade, not a free lunch: the adapter's small, low-rank update (session 4) learns less of the new task and disturbs less of the old.</p>
+        <p>Neither result removes the need to measure. A LoRA tune forgets less on average, in their settings; your regression set says whether it forgot the one thing your system relies on.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Building the regression set<span class="mini">3 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Start from the incidents and the unwritten rules. Every behaviour someone complained about once, every format a downstream system parses, every refusal compliance asked for, becomes a small fixed set of inputs with an expected property. Keep it separate from the held-out set, version it, and run it on the base model too, so a drop is measured against where you started. Suites, versioning and running them in CI are taught in <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/courses/b8-regression-suites.html">Learn AI Evals, regression suites ↗</a>.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The same rule from the people who sell fine-tuning.</strong> OpenAI's supervised fine-tuning guide says "Only invest in fine-tuning after setting up evals", and advises carving the holdout set from the same collected data with roughly the same diversity of inputs and responses. The vendor's own guidance puts the eval before the training job, which is the order this session follows.</p>
+    </div>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Build-along</span>
+      <h2>The before-and-after table</h2>
+      <span class="tag demo">★ 22 min · everyone builds</span>
+    </div>
+    <p class="lede">Constructed Larkline example, real rows. Open <a href="06-the-break-even-bench.html#bench">the bench in session 6</a> in a second tab, Part A only, and build the table Priya hands to Tom: three arms down the side, six queues across, recall in every cell, and a pass condition for each queue written before you look.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 290" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A heatmap of recall per queue for three arms. Big model with prompt: Fraud and loss 98.2, Cards 92.9, Transfers 93.3, Top-ups 88.2, Payments 81.7, Account 97.3. Small model prompt only: 86.0, 77.3, 71.9, 77.2, 63.5, 71.2. Small model tuned: 84.2, 97.9, 93.3, 97.1, 94.2, 91.8. The tuned model's Fraud and loss cell is outlined.">
+        <defs>
+          <filter id="f5dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="59" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f5dH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f5dL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f5dS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f5dC { font: 700 11px Inter, sans-serif; fill: #23210E; }
+          .f5dA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f5dN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f5dH" x="30" y="26">RECALL BY QUEUE, THREE ARMS, 600 ROWS (PREDICTIONS MODELLED, COUNTING COMPUTED)</text>
+
+        <g filter="url(#f5dSk)" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="202" y="70" width="92" height="40" rx="5" fill="#F5D63D"/>
+          <rect x="298" y="70" width="92" height="40" rx="5" fill="#E8DE8C"/>
+          <rect x="394" y="70" width="92" height="40" rx="5" fill="#E8DE8C"/>
+          <rect x="490" y="70" width="92" height="40" rx="5" fill="#FBF7DC"/>
+          <rect x="586" y="70" width="92" height="40" rx="5" fill="#FBF7DC"/>
+          <rect x="682" y="70" width="92" height="40" rx="5" fill="#F5D63D"/>
+          <rect x="202" y="114" width="92" height="40" rx="5" fill="#FBF7DC"/>
+          <rect x="298" y="114" width="92" height="40" rx="5" fill="#FFFFFF"/>
+          <rect x="394" y="114" width="92" height="40" rx="5" fill="#FFFFFF"/>
+          <rect x="490" y="114" width="92" height="40" rx="5" fill="#FFFFFF"/>
+          <rect x="586" y="114" width="92" height="40" rx="5" fill="#FFFFFF"/>
+          <rect x="682" y="114" width="92" height="40" rx="5" fill="#FFFFFF"/>
+          <rect x="202" y="158" width="92" height="40" rx="5" fill="#FFF5C4" stroke="#1F4A7C" stroke-width="2.4"/>
+          <rect x="298" y="158" width="92" height="40" rx="5" fill="#F5D63D"/>
+          <rect x="394" y="158" width="92" height="40" rx="5" fill="#E8DE8C"/>
+          <rect x="490" y="158" width="92" height="40" rx="5" fill="#F5D63D"/>
+          <rect x="586" y="158" width="92" height="40" rx="5" fill="#E8DE8C"/>
+          <rect x="682" y="158" width="92" height="40" rx="5" fill="#E8DE8C"/>
+          <rect x="200" y="226" width="14" height="12" rx="2" fill="#FFFFFF"/>
+          <rect x="300" y="226" width="14" height="12" rx="2" fill="#FBF7DC"/>
+          <rect x="410" y="226" width="14" height="12" rx="2" fill="#E8DE8C"/>
+          <rect x="520" y="226" width="14" height="12" rx="2" fill="#F5D63D"/>
+        </g>
+
+        <text class="f5dS" x="248" y="60" text-anchor="middle">Fraud, loss</text>
+        <text class="f5dS" x="344" y="60" text-anchor="middle">Cards</text>
+        <text class="f5dS" x="440" y="60" text-anchor="middle">Transfers</text>
+        <text class="f5dS" x="536" y="60" text-anchor="middle">Top-ups</text>
+        <text class="f5dS" x="632" y="60" text-anchor="middle">Payments</text>
+        <text class="f5dS" x="728" y="60" text-anchor="middle">Account</text>
+        <text class="f5dL" x="190" y="94" text-anchor="end">Big + prompt</text>
+        <text class="f5dL" x="190" y="138" text-anchor="end">Small, prompt only</text>
+        <text class="f5dL" x="190" y="182" text-anchor="end">Small, LoRA-tuned</text>
+        <text class="f5dC" x="248" y="94" text-anchor="middle">98.2</text>
+        <text class="f5dC" x="344" y="94" text-anchor="middle">92.9</text>
+        <text class="f5dC" x="440" y="94" text-anchor="middle">93.3</text>
+        <text class="f5dC" x="536" y="94" text-anchor="middle">88.2</text>
+        <text class="f5dC" x="632" y="94" text-anchor="middle">81.7</text>
+        <text class="f5dC" x="728" y="94" text-anchor="middle">97.3</text>
+        <text class="f5dC" x="248" y="138" text-anchor="middle">86.0</text>
+        <text class="f5dC" x="344" y="138" text-anchor="middle">77.3</text>
+        <text class="f5dC" x="440" y="138" text-anchor="middle">71.9</text>
+        <text class="f5dC" x="536" y="138" text-anchor="middle">77.2</text>
+        <text class="f5dC" x="632" y="138" text-anchor="middle">63.5</text>
+        <text class="f5dC" x="728" y="138" text-anchor="middle">71.2</text>
+        <text class="f5dC" x="248" y="182" text-anchor="middle">84.2</text>
+        <text class="f5dC" x="344" y="182" text-anchor="middle">97.9</text>
+        <text class="f5dC" x="440" y="182" text-anchor="middle">93.3</text>
+        <text class="f5dC" x="536" y="182" text-anchor="middle">97.1</text>
+        <text class="f5dC" x="632" y="182" text-anchor="middle">94.2</text>
+        <text class="f5dC" x="728" y="182" text-anchor="middle">91.8</text>
+        <text class="f5dA" x="190" y="236" text-anchor="end">recall %</text>
+        <text class="f5dS" x="220" y="236">under 80</text>
+        <text class="f5dS" x="320" y="236">80 to 90</text>
+        <text class="f5dS" x="430" y="236">90 to 95</text>
+        <text class="f5dS" x="540" y="236">95 and over</text>
+
+        <text class="f5dN" x="30" y="272">The tuned row is the warmest except in its first cell, which is the one with the highest stakes.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - read the table column by column, against the pass condition you wrote for each queue first</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Write the pass conditions before you open the bench.</strong> One line per queue, chosen from what a miss costs. Doing this first is what keeps the eval honest.</p>
+        <div class="prompt-box good"><span class="label">★ Step 1 · pass conditions (constructed)</span>Fraud and loss   recall at least 92%   (a missed claim is the costly error)
+Every other queue   recall at least 90%
+Overall           at least the baseline's accuracy
+Regression set    no kept behaviour drops</div>
+      </div>
+      <div class="step">
+        <p><strong>Score the baseline.</strong> In Part A, pick "Big API model + prompt". Copy accuracy, macro-F1 and the six recall values from the recall bars into the first row.</p>
+        <div class="prompt-box good"><span class="label">★ Step 2 · baseline row, as the bench prints it</span>Big API model + prompt
+Accuracy 91.0% (546 of 600)   Macro-F1 0.910
+Recall: Fraud 98.2  Cards 92.9  Transfers 93.3
+        Top-ups 88.2  Payments 81.7  Account 97.3</div>
+      </div>
+      <div class="step">
+        <p><strong>Score the starting point and the candidate.</strong> Repeat for "Small model, prompt only" and "Small model, LoRA-tuned". Watch the Fraud and loss bar and the first row of the confusion matrix as you switch.</p>
+        <div class="prompt-box good"><span class="label">★ Step 3 · two more rows</span>Small, prompt only   74.2% (445)   Macro-F1 0.736
+Small, LoRA-tuned    94.3% (566)   Macro-F1 0.936
+Tuned Fraud and loss recall: 84.2%  (48 of 57)</div>
+      </div>
+      <div class="step">
+        <p><strong>Check each queue against its pass condition, not against the other arm.</strong> The question is not "is the tune better?" but "does the tune meet the bar we set?".</p>
+        <div class="prompt-box good"><span class="label">★ Step 4 · the check</span>Fraud and loss   84.2  &lt; 92   FAIL
+Cards 97.9  Transfers 93.3  Top-ups 97.1  Payments 94.2  Account 91.8
+                 all &gt;= 90      pass
+Overall          94.3 &gt;= 91.0  pass
+Verdict: not yet. One queue fails its floor.</div>
+      </div>
+      <div class="step">
+        <p><strong>Reproduce the numbers in code on your own set.</strong> The bench computes the same metrics in your browser; on your own data, scikit-learn does it in three lines. Read the code; your numbers will differ.</p>
+        <div class="prompt-box good"><span class="label">★ Step 5 · the same metrics in Python</span>from sklearn.metrics import accuracy_score, f1_score, classification_report
+# y_true: the frozen held-out labels; y_pred: one arm's routed queues
+print(accuracy_score(y_true, y_pred))
+print(f1_score(y_true, y_pred, average="macro"))
+print(classification_report(y_true, y_pred, digits=3))  # per-queue recall and precision</div>
+      </div>
+      <div class="step">
+        <p><strong>Write what goes back to the data.</strong> A failed queue is a data task before it is a model task: more and cleaner examples of that queue, then a new tune scored on the same frozen set and the regression set.</p>
+        <div class="prompt-box good"><span class="label">★ Step 6 · next iteration</span>Add: 400 relabelled Fraud and loss notes from the last 18 months
+Keep: the 600-row held-out set and the regression set unchanged
+Re-run: tune, then all three arms' rows again
+Hand to session 6: the cost side of the same decision</div>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <p><strong>Never move the held-out set between runs.</strong> The moment you add the hard urgent notes to the held-out set after seeing the failure, the before and after numbers stop being comparable. New hard cases go into a new, versioned set, and both are reported.</p>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>Before session 6</h2>
+      <span class="tag exercise">30 min</span>
+    </div>
+    <ol>
+      <li><strong>Write pass conditions</strong> for every class in a task of your own, one line each, with the cost of a miss beside it.</li>
+      <li><strong>Score your current system</strong> on a frozen held-out set before anything else changes, and save the per-class table with a date.</li>
+      <li><strong>List five kept behaviours</strong> your system relies on that nobody has written down: a format, a refusal, a language, a rule. Turn each into three test inputs.</li>
+      <li><strong>Check train-test overlap</strong> on your own data with the normalisation from session 3, and write down how many rows you found.</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and session 5 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="3">
+      <p class="qtext">1 · When should the big-model baseline be scored?</p>
+      <button class="qopt" type="button">A · After the tune, on whichever rows the tuned model found hardest</button>
+      <button class="qopt" type="button">B · Never; the vendor's published benchmark is the baseline</button>
+      <button class="qopt" type="button">C · On the training set, since it is larger</button>
+      <button class="qopt" type="button">D · Before any tuning, on the frozen held-out set, with the same scorer the tuned model will face</button>
+      <p class="qwhy">Like with like: the same frozen rows and the same scorer, set before you see the tuned model's results. A chooses the eval after seeing the answer; B measures a different task; C includes rows the tuned model trained on.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">2 · The tuned model scores 94.3% accuracy against the baseline's 91.0%, and 84.2% recall on Fraud and loss against 98.2%. What is the right reading?</p>
+      <button class="qopt" type="button">A · The tune is better; accuracy is the summary that counts</button>
+      <button class="qopt" type="button">B · The tune is better on most queues and worse on the urgent one; against a 92% floor on that queue, it does not pass yet</button>
+      <button class="qopt" type="button">C · The difference is noise, so ignore both numbers</button>
+      <button class="qopt" type="button">D · Recall does not matter for routing tasks</button>
+      <p class="qwhy">Accuracy averages six queues of different sizes and stakes. The urgent queue's recall answers "how many urgent claims did we catch", and 48 of 57 is 9 urgent messages sent to slow desks. The pass condition, written first, decides.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">3 · What does a regression set catch that the held-out routing set does not?</p>
+      <button class="qopt" type="button">A · Leaked test rows</button>
+      <button class="qopt" type="button">B · A lower GPU bill</button>
+      <button class="qopt" type="button">C · Behaviours the tune may have lost outside the target task, such as a format, a refusal or a language</button>
+      <button class="qopt" type="button">D · Whether LoRA rank was set correctly</button>
+      <p class="qwhy">Catastrophic forgetting is loss outside the target task. Biderman et al. (2024) found LoRA forgets less than full fine-tuning on average in their settings; a regression set measures whether your tune forgot the thing your system needs.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Banking77 (PolyAI, CC BY 4.0), via the session 6 bench</span><span class="note">600 real rows mapped to six queues; three arms' predictions modelled; accuracy, macro-F1, recall and the confusion matrix computed and matched by an independent Python run</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">OpenAI supervised fine-tuning guide</span><span class="note">Evals before fine-tuning; a holdout carved from the same data with the same diversity; read at source 2026-11-08</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Biderman et al. 2024, LoRA Learns Less and Forgets Less (arXiv:2405.09673)</span><span class="note">LoRA underperforms full fine-tuning on the target domain in standard low-rank settings and better maintains performance outside it; abstract read at source</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Golden sets, LLM-as-judge, regression suites</span><span class="note">Linked to Learn AI Evals b2, b5 and b8, not retaught here</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Larkline, its pass conditions and regression list</span><span class="note">Constructed for teaching; your numbers will differ</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 5 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Like with like</b><span>Same frozen rows, same scorer, every arm. Baseline scored before the tune.</span></div>
+      <div class="cheat-item"><b>Three arms</b><span>What you replace, the untuned start, the candidate. Report all three.</span></div>
+      <div class="cheat-item"><b>Per-queue first</b><span>Recall for the queue that carries the risk, then macro-F1, then accuracy.</span></div>
+      <div class="cheat-item"><b>Floors before results</b><span>Write each queue's pass condition before you look.</span></div>
+      <div class="cheat-item"><b>Regression set</b><span>Formats, refusals, languages: the behaviours a tune can forget.</span></div>
+      <div class="cheat-item"><b>Frozen means frozen</b><span>New hard cases go into a new versioned set, never into the old one.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>Quality is half the decision. Session 6 puts the same three arms on the bench beside the cost side: monthly cost at volume, the break-even point, the go/no-go under a floor, the trap of cheapest-wins and the price of retraining.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Session 5 of 6 · learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="04-lora-and-qlora.html">← Prev: LoRA and QLoRA</a> &nbsp;·&nbsp; <a href="06-the-break-even-bench.html">Next: The break-even bench →</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

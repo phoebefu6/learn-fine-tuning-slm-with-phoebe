@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Session 6 of 6. The bench: 600 real customer messages scored for three model arms, then the monthly cost of a big API model against a tuned small model, the break-even volume, a go/no-go under an accuracy floor, the cheapest-wins trap, the retrain-every-month break button, serving options, drift, and Larkline's decision memo.">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="The break-even bench: cost, serving and drift - learn fine-tuning slm with phoebe">
+<meta property="og:description" content="Session 6 of 6. Score the arms on 600 real rows, find the volume where a tuned small model pays, and see why cheapest-wins is a trap.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/courses/06-the-break-even-bench.html">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The break-even bench: cost, serving and drift - learn fine-tuning slm with phoebe">
+<meta name="twitter:description" content="Session 6 of 6. Eval scorer, break-even volume and a go/no-go under a floor, computed in your browser.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Session 6 · The break-even bench: cost, serving and drift - learn fine-tuning slm with phoebe</title>
+<link rel="stylesheet" href="../assets/style.css?v=2">
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="wrap">
+    <span class="crumb"><a href="../index.html">learn-fine-tuning-slm-with-phoebe</a> / Session 6 of 6</span>
+    <button class="btn" id="toggle-all" type="button">Expand all</button>
+    <button class="btn primary" id="zoom-toggle" type="button">Projector zoom: off</button>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn Fine-tuning and Small Language Models with Phoebe · Session 6 of 6</div>
+    <h1>The <span class="accent">break-even</span> bench: cost, serving and drift</h1>
+    <p class="sub">Five sessions built the case: the ladder, the model, the data, the adapter and the eval. Tonight the bench puts the two questions side by side and computes both in your browser. Is the tuned small model good enough, on 600 real customer messages and on the one queue that cannot be missed? And at what monthly volume does it cost less than the big API model it would replace? Then the two ways to fool yourself, cheapest-wins and forgetting the retrain, and Larkline's decision memo.</p>
+    <div class="chip-row">
+      <span class="chip level">🔴 Bench night</span>
+      <span class="chip audience">Builders and their budget owners</span>
+      <span class="chip audience">Runs in the browser</span>
+      <span class="chip time">45 min</span>
+    </div>
+    <div class="agenda">
+      <span class="a1" style="flex:1">0-3 · Welcome</span>
+      <span class="a2" style="flex:3">3-12 · Read the eval, read the cost</span>
+      <span class="a3" style="flex:6">12-40 · The bench, then the memo</span>
+      <span class="a4" style="flex:1">40-45 · Q&amp;A</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="section" id="intro">
+    <div class="section-kicker">
+      <span class="klabel">Part 0</span>
+      <h2>Where we start</h2>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya has her held-out set, a tuned small model and a big-model baseline. The bench reproduces her decision on real rows: 600 customer messages from Banking77, a public intent dataset released by PolyAI under CC BY 4.0, mapped from 77 intents to six queues, one of them urgent. Banking messages stand in for Larkline's claim notes. The labels and the text are real. The three arms' predictions are modelled by a stated, seeded rule, because no model runs in a browser, and every number built on them says so.</p>
+
+    <div class="legend">
+      <span class="pill">🎫 Clear all three quiz questions to stamp your passport</span>
+      <span class="pill">computed = counted from real rows in your browser</span>
+      <span class="pill">modelled predictions = a seeded rule, not a model's output</span>
+      <span class="pill">list price = vendor price read 2026-11-08, re-verify</span>
+    </div>
+
+    <div class="callout win">
+      <p><strong>★ What you walk out with tonight.</strong> A way to read any model comparison in four numbers, the break-even volume for your own task, a go/no-go rule that cannot be talked out of its accuracy floor, the cost of keeping a tuned model fresh, and a one-page decision memo you can hand to whoever signs the budget.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-1">
+    <div class="section-kicker">
+      <span class="klabel">Part 1 · covers the eval scorer</span>
+      <h2>Four numbers, and the one that hides</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">The scorer compares each row's true queue with the queue an arm routed it to. Every number comes out of one table: the confusion matrix, true queue down the side, routed queue across the top. The diagonal is what went right. A row of the matrix divided by its total is that queue's recall, the share of its messages that reached the right desk.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="How a row becomes a number. 600 labelled rows, each with a true queue and a routed queue, flow into a six by six confusion matrix. The diagonal counts correct routes and gives accuracy, 566 of 600 for the tuned model, 94.3 percent. The first row, Fraud and loss, is highlighted: 48 of its 57 rows reached the right queue, a recall of 84.2 percent.">
+        <defs>
+          <filter id="f6aSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="61" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <pattern id="f6aHc" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(-38)"><line x1="0" y1="0" x2="0" y2="7" stroke="#645F0C" stroke-width="1" opacity=".5"/></pattern>
+          <marker id="f6aAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f6aH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f6aL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f6aS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f6aB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f6aA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f6aV { font: 800 18px Inter, sans-serif; fill: #3F3C06; }
+          .f6aN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f6aH" x="30" y="26">FROM 600 ROWS TO TWO NUMBERS: THE TUNED SMALL MODEL</text>
+
+        <g filter="url(#f6aSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="30" y="70" width="150" height="150" rx="8" transform="rotate(-1 105 145)" fill="url(#f6aHc)"/>
+          <path d="M190 145 L250 145" marker-end="url(#f6aAr)"/>
+          <rect x="260" y="56" width="300" height="180" rx="8" transform="rotate(0.3 410 146)" fill="#FFFFFF"/>
+          <rect x="268" y="64" width="284" height="26" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M280 96 L540 228" stroke="#D6D0AE" stroke-dasharray="4 4"/>
+          <path d="M570 110 L640 92" marker-end="url(#f6aAr)"/>
+          <path d="M570 190 L640 206" marker-end="url(#f6aAr)"/>
+          <rect x="650" y="56" width="200" height="74" rx="10" transform="rotate(0.6 750 93)" fill="#FBF7DC"/>
+          <rect x="650" y="170" width="200" height="74" rx="10" transform="rotate(-0.6 750 207)" fill="#FFF5C4" stroke="#1F4A7C"/>
+        </g>
+
+        <text class="f6aL" x="105" y="244" text-anchor="middle">600 labelled rows</text>
+        <text class="f6aS" x="105" y="260" text-anchor="middle">true queue + routed queue</text>
+        <text class="f6aB" x="278" y="82">Fraud and loss row: 48 of 57 right</text>
+        <text class="f6aS" x="410" y="252" text-anchor="middle">diagonal = routed to the right queue</text>
+        <text class="f6aS" x="664" y="78">accuracy, all queues</text>
+        <text class="f6aV" x="664" y="110">94.3%</text>
+        <text class="f6aS" x="664" y="192">recall, Fraud and loss</text>
+        <text class="f6aV" x="664" y="224">84.2%</text>
+
+        <text class="f6aN" x="30" y="286">Predictions modelled; counting computed. The big model's Fraud and loss recall on the same rows is 98.2%.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the headline number and the urgent queue's number come out of the same table, and they disagree</figcaption>
+    </figure>
+
+    <details class="card" open>
+      <summary><span class="mode live">Live</span>Accuracy says tune; the urgent queue says wait<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>On the 600 rows the tuned small model routes 566 correctly, 94.3 percent, against 546 for the big model with a prompt, 91.0 percent. Macro-F1, which weights the six queues equally, agrees: 0.936 against 0.910. On those numbers alone the tune wins. Now read the Fraud and loss queue: the big model catches 98.2 percent of it and the tuned model 84.2 percent. The tune got better at the common queues and worse at the rare, urgent one, which is exactly the shape a model trained on imbalanced history tends to take.</p>
+        <p>The predictions behind these numbers are modelled, so the specific values are a teaching case, not a measurement of any product. The lesson is the shape: a headline metric can rise while the one queue that carries the risk falls, and only a per-class view shows it. Session 5 built that view; here it becomes a floor.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>The third arm: the small model before the tune<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>The bench also scores the same small model with the prompt only: 74.2 percent accuracy, macro-F1 0.736, with Payments and fees its weakest queue at 63.5 percent. The gap from 74.2 to 94.3 is the tune's contribution, and the gap from 74.2 to 91.0 is what the big model's size buys without any tuning. Comparing a tuned small model only against the big one hides the first gap; comparing it only against its own untuned self hides the second. Show both.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="bench">
+    <div class="section-kicker">
+      <span class="klabel">Build-along · the bench</span>
+      <h2>Score the arms, then find the break-even</h2>
+      <span class="tag demo">★ 18 min · the main event</span>
+    </div>
+    <p class="lede">Part A opens on the tuned small model. Click through the three arms and watch the Fraud and loss bar and the first row of the matrix. Part B opens on Larkline's defaults: 900,000 requests a month, gpt-4.1 list prices, one NVIDIA L4 at $0.80 an hour, a $6,000 one-off build (constructed) and a 92 percent accuracy floor. Then work the five moves in the tip below, in order, and say out loud what changed.</p>
+
+    <div id="ftn-bench" data-arm="tuned"></div>
+
+    <div class="callout tip">
+      <p><strong>Five moves, in order.</strong> (1) Read the default: GO, $1,084 a month against $1,224, break-even at 797,304 requests. (2) Tick "Retrain every month": the flat line rises to $1,688 and break-even moves to 1,241,422, so the answer becomes NO-GO. Untick it. (3) Switch the floor to fraud and loss recall: NO-GO, because 84.2 percent is under 92. (4) Now pick "Cheapest wins": it prints GO and flags that the floor would refuse. (5) Back on the floor, change the price preset to gpt-5-mini: $171 a month, break-even 5,707,018. The cheapest rival was a smaller API model all along.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-2">
+    <div class="section-kicker">
+      <span class="klabel">Part 2 · covers break-even and serving</span>
+      <h2>A sloped line against a flat one</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">The big API model is billed per token, so its monthly cost is a straight line through zero: double the requests, double the bill. The tuned small model is billed mostly per hour of GPU, so its cost is close to flat until one GPU runs out of capacity. Break-even is where the two lines cross. Below it the API is cheaper; above it the tune is.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Monthly cost against monthly requests. The big API model at gpt-4.1 list prices rises in a straight line, 1.36 dollars per 1,000 requests. The tuned small model is a flat line at 1,084 dollars a month, crossing the big model at 797,304 requests. Larkline's 900,000 sits just past the crossing. With a monthly retrain the flat line rises to 1,688 dollars and the crossing moves to 1,241,422, past Larkline's volume.">
+        <defs>
+          <filter id="f6bSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="67" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+        </defs>
+        <style>
+          .f6bH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f6bL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f6bS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f6bB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f6bA { font: 700 11px Inter, sans-serif; fill: #645F0C; }
+          .f6bN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f6bH" x="30" y="26">MONTHLY COST AGAINST VOLUME (LIST PRICES 2026-11-08; BUILD COST CONSTRUCTED)</text>
+
+        <g filter="url(#f6bSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M90 280 L820 280"/>
+          <path d="M90 280 L90 50"/>
+          <path d="M90 280 L780 66" stroke="#1F4A7C" stroke-width="2.6"/>
+          <path d="M90 168 L780 168" stroke="#645F0C" stroke-width="2.6"/>
+          <path d="M90 106 L780 106" stroke="#645F0C" stroke-width="2" stroke-dasharray="7 5"/>
+          <circle cx="451" cy="168" r="6" fill="#F5D63D"/>
+          <circle cx="652" cy="106" r="6" fill="#FFFFFF"/>
+          <path d="M498 274 L498 112" stroke="#5E5A44" stroke-width="1.4" stroke-dasharray="4 4"/>
+        </g>
+
+        <text class="f6bB" x="640" y="52">big API model</text>
+        <text class="f6bA" x="600" y="156">tuned small, $1,084</text>
+        <text class="f6bA" x="110" y="98">retrain monthly, $1,688</text>
+        <text class="f6bL" x="440" y="140" text-anchor="end">break-even</text>
+        <text class="f6bS" x="440" y="154" text-anchor="end">797,304 a month</text>
+        <text class="f6bS" x="668" y="124">1,241,422</text>
+        <text class="f6bS" x="508" y="262">Larkline 900,000</text>
+        <text class="f6bS" x="90" y="300" text-anchor="middle">0</text>
+        <text class="f6bS" x="820" y="300" text-anchor="end">requests a month</text>
+        <text class="f6bS" x="82" y="58" text-anchor="end">$</text>
+
+        <text class="f6bN" x="30" y="326">Big model: 600 input + 20 output tokens at $2.00 / $8.00 per 1M = $1.36 per 1,000 requests.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - Larkline's volume sits just past the crossing, which is why one forgotten monthly cost flips the answer</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>What is inside the flat line<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Three things, and the training run is the smallest. Hosting: one NVIDIA L4 (24 GB) on Hugging Face Inference Endpoints lists at $0.80 an hour, so 730 hours is $584 a month. The one-off build, the labelling, eval and integration work, is set at $6,000 (constructed; put your own in) and amortised over 12 months, $500 a month. The training run itself: 2,000 examples of 150 tokens for 3 epochs is 900,000 tokens, which at Together AI's $0.34 per million supervised fine-tuning price is $0.31, so the $4.00 minimum charge applies. Hosting and people are the cost. GPUs for training, at this size, are a rounding error.</p>
+        <p>On the other side, the big model's line is $1.36 per 1,000 requests at gpt-4.1's list price of $2.00 per million input tokens and $8.00 per million output. Most of that is input: Larkline's prompt carries instructions and four worked examples on every single call. A tuned model needs neither, which is one of the quiet savings a tune buys.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>Three ways to serve a tuned model<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p><strong>A dedicated GPU you rent by the hour.</strong> Flat cost, your own capacity, the shape the bench models. Hugging Face lists an L4 at $0.80, an L40S (48 GB) at $1.80, an A100 (80 GB) at $2.50 and an H100 (80 GB) at $4.50 an hour; Together AI lists a dedicated H100 at $5.49. <strong>Serverless per-token hosting.</strong> Some providers serve small open models per token, Together lists Qwen3.5 9B at $0.17 input and $0.25 output per million, which turns the flat line back into a shallow slope; check whether your provider serves your own adapter on that price. <strong>The vendor's own fine-tuning API.</strong> No GPUs to run, but OpenAI's platform, the best-known one, is closed to new users, with jobs for existing customers until January 6, 2027.</p>
+        <p>All of these prices were read on 2026-11-08 and change often. Re-verify before any number leaves the room.</p>
+      </div>
+    </details>
+
+    <div class="callout example">
+      <span class="ex-pill">Real world</span>
+      <p><strong>The rival nobody priced.</strong> On the bench, switching the big model from gpt-4.1 to gpt-5-mini, whose list price is $0.25 per million input tokens and $2.00 per million output, drops the API bill to $171 a month and moves break-even to 5,707,018 requests. A smaller API model is often the cheapest rung no one tested. The bench cannot tell you its accuracy, because it only models one big arm; your held-out set can, in an afternoon, which is the cheapest experiment in this whole decision.</p>
+    </div>
+  </section>
+
+  <section class="section" id="part-3">
+    <div class="section-kicker">
+      <span class="klabel">Part 3 · covers the anti-lever, the break button and drift</span>
+      <h2>Two ways to fool yourself, and the one that arrives later</h2>
+      <span class="tag concept">4 min live</span>
+    </div>
+    <p class="lede">The go/no-go rule has two conditions joined by AND: the tuned model must clear the accuracy floor, and it must cost less at your volume. "Cheapest wins" drops the first condition, and it is the version that tends to survive a budget meeting. Retraining is the cost most first plans leave out. Drift is the reason you will need it.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two panels, same inputs: the floor applies to fraud and loss recall at 92 percent. Left, cheapest wins: tuned costs 1,084 against 1,224, so GO, and the 84.2 percent recall is never checked. Right, go/no-go under the floor: the recall check comes first, 84.2 is under 92, so NO-GO before cost is read.">
+        <defs>
+          <filter id="f6cSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="71" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="f6cAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f6cH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f6cL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f6cS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f6cB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f6cR { font: 800 12px Inter, sans-serif; fill: #991B1B; }
+          .f6cN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f6cH" x="30" y="26">SAME INPUTS, TWO RULES: FLOOR ON FRAUD AND LOSS RECALL, 92%</text>
+
+        <g filter="url(#f6cSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="46" width="390" height="190" rx="12" transform="rotate(-0.4 235 141)" fill="#FEF2F2" stroke="#FCA5A5"/>
+          <rect x="450" y="46" width="390" height="190" rx="12" transform="rotate(0.4 645 141)" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <rect x="62" y="100" width="150" height="44" rx="8" fill="#FFFFFF"/>
+          <path d="M216 122 L262 122" marker-end="url(#f6cAr)"/>
+          <rect x="268" y="100" width="140" height="44" rx="8" fill="#FFFFFF"/>
+          <rect x="472" y="100" width="150" height="44" rx="8" fill="#FFFFFF"/>
+          <path d="M626 122 L672 122" marker-end="url(#f6cAr)"/>
+          <rect x="678" y="100" width="140" height="44" rx="8" fill="#FFFFFF"/>
+        </g>
+
+        <text class="f6cL" x="58" y="80">✗ Cheapest wins</text>
+        <text class="f6cS" x="137" y="126" text-anchor="middle">$1,084 &lt; $1,224?</text>
+        <text class="f6cR" x="338" y="127" text-anchor="middle">GO</text>
+        <text class="f6cS" x="58" y="176">recall 84.2% is never read</text>
+        <text class="f6cS" x="58" y="194">the urgent queue loses 14 points</text>
+        <text class="f6cS" x="58" y="212">against the big model's 98.2%</text>
+        <text class="f6cL" x="468" y="80">✓ Go/no-go under the floor</text>
+        <text class="f6cS" x="547" y="126" text-anchor="middle">84.2% clears 92%?</text>
+        <text class="f6cB" x="748" y="127" text-anchor="middle">NO-GO</text>
+        <text class="f6cS" x="468" y="176">the floor is read first</text>
+        <text class="f6cS" x="468" y="194">cost only matters once it clears</text>
+        <text class="f6cS" x="468" y="212">fix the urgent queue, then return</text>
+
+        <text class="f6cN" x="30" y="270">Both rules see the same $1,084 against $1,224. Only one of them looks at the queue that cannot be missed.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - the anti-lever is not wrong about cost; it is silent about the thing the floor exists to protect</figcaption>
+    </figure>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The anti-lever, with its honest nuance<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>Set the floor on fraud and loss recall at 92 percent and the bench prints NO-GO: 84.2 percent does not clear it. Switch to "Cheapest wins" and the same inputs print GO, with a warning that the floor would refuse. The same happens with a 96 percent floor on overall accuracy, which 94.3 does not clear. Cheapest-wins never improves a decision; at best it agrees with the floor, and when it disagrees it is the one that is wrong about risk.</p>
+        <p>The nuance: the floor is only as good as the number it is set at. A floor nobody can justify ("why 92?") will be argued down in the meeting. Set it from the cost of a miss, a fraud claim routed to a slow queue, and write that reasoning in the memo.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode live">Live</span>The break button: retrain every month<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>A tuned model is frozen on the day its data was labelled. If Larkline's notes drift, a new product line, a storm season, a new fraud pattern, the tune ages while the big API model is updated by its vendor. Plans that include a monthly retrain usually forget its cost. Tick the box: one more training run ($4.00) plus $600 of people time each month (constructed: relabelling, re-running the eval, redeploying). The flat line rises from $1,084 to $1,688, break-even moves from 797,304 to 1,241,422 requests, and Larkline's 900,000 is now on the wrong side.</p>
+        <p>That does not mean "never retrain". It means the retrain cadence is a number in the business case, chosen from how fast the eval decays, not from habit.</p>
+      </div>
+    </details>
+
+    <details class="card">
+      <summary><span class="mode self">Self-study</span>Drift and the launch gate, next door<span class="mini">2 min</span><span class="caret">▶</span></summary>
+      <div class="body">
+        <p>How to detect drift in production, by watching input distributions, label agreement and the eval over time, is taught in <a href="https://phoebefu6.github.io/learn-ai-observability-with-phoebe/courses/b9-drift-and-silent-changes.html">Learn AI Observability, drift and silent changes ↗</a>. How to turn an eval into a launch decision with risk tiers is in <a href="https://phoebefu6.github.io/learn-agent-launch-with-phoebe/courses/b9-the-launch-gate.html">Learn Agent Launch, the launch gate ↗</a>. The bench's go/no-go is the cost-shaped version of that gate; the regression set from session 5 is what you re-run on every retrain.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="section" id="demo-1">
+    <div class="section-kicker">
+      <span class="klabel">Capstone</span>
+      <h2>Larkline's decision memo</h2>
+      <span class="tag demo">★ 10 min · everyone writes</span>
+    </div>
+    <p class="lede">Constructed Larkline example. Priya's memo is one page with six lines, written for Tom and the budget owner, and every number in it is one the bench printed. Write yours for your own task as you go, from your own bench run.</p>
+
+    <figure class="zoomable">
+      <svg viewBox="0 0 880 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The memo drawn as a page with six lines: the decision, the eval result with the urgent queue, the cost at volume and break-even, the conditions, the retrain cadence and its cost, and the review date. The conditions line is highlighted. An arrow leads from the bench on the left into the memo, and from the memo to the budget owner on the right.">
+        <defs>
+          <filter id="f6dSk" x="-3%" y="-3%" width="106%" height="106%"><feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="73" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2.4" xChannelSelector="R" yChannelSelector="G"/></filter>
+          <marker id="f6dAr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#23210E" stroke-width="1.6" stroke-linecap="round"/></marker>
+        </defs>
+        <style>
+          .f6dH { font: 800 12px Inter, sans-serif; fill: #23210E; }
+          .f6dL { font: 600 12px Inter, sans-serif; fill: #23210E; }
+          .f6dS { font: 400 11px Inter, sans-serif; fill: #5E5A44; }
+          .f6dB { font: 800 11px Inter, sans-serif; fill: #16355A; }
+          .f6dN { font: 400 12px Inter, sans-serif; fill: #5E5A44; }
+        </style>
+
+        <text class="f6dH" x="30" y="26">ONE PAGE, SIX LINES, EVERY NUMBER FROM THE BENCH</text>
+
+        <g filter="url(#f6dSk)" fill="none" stroke="#23210E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="40" y="96" width="130" height="70" rx="8" transform="rotate(-1.2 105 131)" fill="#FBF7DC"/>
+          <path d="M176 131 L262 131" marker-end="url(#f6dAr)"/>
+          <rect x="280" y="44" width="330" height="180" rx="8" transform="rotate(-0.5 445 134)" fill="#FFFFFF"/>
+          <path d="M296 76 L594 76 M296 102 L594 102 M296 128 L594 128 M296 154 L594 154 M296 180 L594 180 M296 206 L594 206" stroke="#D6D0AE" stroke-width="1.2"/>
+          <rect x="292" y="136" width="306" height="22" rx="4" fill="#FFF5C4" stroke="#1F4A7C"/>
+          <path d="M626 131 L708 131" marker-end="url(#f6dAr)"/>
+          <circle cx="770" cy="104" r="15" fill="#FFFFFF"/>
+          <path d="M770 119 L770 158 M770 132 L752 146 M770 132 L788 146 M770 158 L758 182 M770 158 L782 182"/>
+        </g>
+
+        <text class="f6dL" x="105" y="128" text-anchor="middle">the bench</text>
+        <text class="f6dS" x="105" y="146" text-anchor="middle">your run</text>
+        <text class="f6dS" x="300" y="72">1 · the decision, in one line</text>
+        <text class="f6dS" x="300" y="98">2 · eval: overall and the urgent queue</text>
+        <text class="f6dS" x="300" y="124">3 · cost at volume, and break-even</text>
+        <text class="f6dB" x="300" y="150">4 · the conditions that would flip it</text>
+        <text class="f6dS" x="300" y="176">5 · retrain cadence and its cost</text>
+        <text class="f6dS" x="300" y="202">6 · review date and owner</text>
+        <text class="f6dL" x="770" y="206" text-anchor="middle">budget owner</text>
+
+        <text class="f6dN" x="30" y="248">Line 4 is the one a reader remembers: it says exactly which number would change the answer.</text>
+      </svg>
+      <figcaption>🔍 Click to zoom - a memo that names its own flip conditions is one a budget owner can hold you to, and trust</figcaption>
+    </figure>
+
+    <div class="steps">
+      <div class="step">
+        <p><strong>Write the decision as one line someone could disagree with.</strong> Not "explore fine-tuning". A decision with a date.</p>
+        <div class="prompt-box good"><span class="label">★ Line 1 · decision</span>Do NOT switch Larkline's claim triage to the tuned small model
+this quarter. Fix the urgent queue first; re-run the bench by
+the end of next month.</div>
+      </div>
+      <div class="step">
+        <p><strong>Report the eval with the urgent queue beside the headline.</strong> Copy the numbers the bench printed, and say that the predictions are modelled when they are.</p>
+        <div class="prompt-box good"><span class="label">★ Line 2 · eval</span>On 600 held-out rows: tuned small 94.3% accuracy (big 91.0%),
+macro-F1 0.936 (0.910). Fraud and loss recall: tuned 84.2%,
+big 98.2%. Floor on fraud and loss recall: 92%. Not cleared.</div>
+      </div>
+      <div class="step">
+        <p><strong>Give cost at your volume and the break-even, with the prices dated.</strong></p>
+        <div class="prompt-box good"><span class="label">★ Line 3 · cost</span>At 900,000 requests a month: big model $1,224, tuned small
+$1,084 ($584 GPU, $500 build amortised). Break-even 797,304.
+List prices read 2026-11-08; build cost is our estimate.</div>
+      </div>
+      <div class="step">
+        <p><strong>Name what would flip the answer, in both directions.</strong> This is the line that makes the memo honest.</p>
+        <div class="prompt-box good"><span class="label">★ Line 4 · flip conditions</span>Flips to GO if: Fraud and loss recall reaches 92% on the same
+held-out set, with no other queue falling below 90%.
+Flips harder to NO-GO if: we must retrain monthly
+(break-even 1,241,422 &gt; our 900,000), or gpt-5-mini
+matches the big model's accuracy ($171 a month).</div>
+      </div>
+      <div class="step">
+        <p><strong>State the retrain plan and its price, and the review.</strong></p>
+        <div class="prompt-box good"><span class="label">★ Lines 5 and 6 · retrain and review</span>Retrain: quarterly, triggered early if the regression set drops
+2 points. Cost per retrain: $4.00 compute + ~$600 people time.
+Review: end of next month. Owner: Priya. Sign-off: Tom.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="exercise">
+    <div class="section-kicker">
+      <span class="klabel">Homework</span>
+      <h2>After the last session</h2>
+      <span class="tag exercise">45 min</span>
+    </div>
+    <ol>
+      <li><strong>Put your own numbers into Part B:</strong> your volume, your tokens per request, your provider's current list prices and an honest build cost. Write down your break-even volume.</li>
+      <li><strong>Find your flip conditions.</strong> Move one input at a time until the verdict changes, and record the value at which it flips.</li>
+      <li><strong>Price the smaller API model.</strong> Run your held-out set through a cheaper API tier before anyone tunes anything, and add its accuracy and cost to the memo.</li>
+      <li><strong>Write the six-line memo</strong> for your own task and send it to the person who asked "should we fine-tune?".</li>
+    </ol>
+  </section>
+
+  <section class="section" id="quiz">
+    <div class="section-kicker">
+      <span class="klabel">Check yourself</span>
+      <h2>Three questions</h2>
+    </div>
+    <p>Clear all three and session 6 gets stamped in your passport.</p>
+
+    <div class="quiz-q" data-answer="1">
+      <p class="qtext">1 · On the bench's defaults, the tuned small model scores 94.3% accuracy against the big model's 91.0%, but 84.2% recall on Fraud and loss against 98.2%. What does a floor of 92% on fraud and loss recall do?</p>
+      <button class="qopt" type="button">A · Nothing, because overall accuracy is higher</button>
+      <button class="qopt" type="button">B · It returns NO-GO, whatever the cost comparison says</button>
+      <button class="qopt" type="button">C · It returns GO, because the tuned model is cheaper</button>
+      <button class="qopt" type="button">D · It averages the two numbers and compares that</button>
+      <p class="qwhy">The rule is AND: clear the floor, then be cheaper. 84.2 is under 92, so the verdict is NO-GO before cost is read. C is exactly what "cheapest wins" prints, and the bench flags it as a GO the floor would refuse.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="2">
+      <p class="qtext">2 · Larkline adds a monthly retrain: one $4.00 training run plus $600 of people time. What happens to break-even?</p>
+      <button class="qopt" type="button">A · Almost nothing, because the training run costs only $4.00</button>
+      <button class="qopt" type="button">B · It falls, because a fresher model is more accurate</button>
+      <button class="qopt" type="button">C · The flat line rises to $1,688 and break-even moves from 797,304 to 1,241,422 requests, past Larkline's 900,000</button>
+      <button class="qopt" type="button">D · The big model's line rises to match</button>
+      <p class="qwhy">The compute is small; the people time is not. Every fixed monthly cost raises the flat line and pushes the crossing to a higher volume. The bench's break button shows the flip from GO to NO-GO.</p>
+    </div>
+
+    <div class="quiz-q" data-answer="0">
+      <p class="qtext">3 · Where does most of the tuned small model's monthly cost come from at Larkline's defaults?</p>
+      <button class="qopt" type="button">A · GPU hosting ($584) and the amortised build ($500); the training run is a $4.00 minimum charge</button>
+      <button class="qopt" type="button">B · The training run, which needs a week of H100 time</button>
+      <button class="qopt" type="button">C · Per-token charges on the small model</button>
+      <button class="qopt" type="button">D · The eval set</button>
+      <p class="qwhy">900,000 training tokens at $0.34 per million is $0.31, so the $4.00 minimum applies. One L4 at $0.80 an hour for 730 hours is $584, and $6,000 of build work over 12 months is $500. Hosting and people are the cost.</p>
+    </div>
+
+    <p class="quiz-score"></p>
+  </section>
+
+  <section class="section" id="official">
+    <div class="section-kicker">
+      <span class="klabel">Sources covered</span>
+      <h2>What this session teaches, and where it came from</h2>
+    </div>
+    <div class="covered">
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Banking77 (PolyAI, CC BY 4.0)</span><span class="note">600 test rows, text unchanged, 77 intents mapped to six queues; Casanueva et al. 2020, arXiv:2003.04807. Labels real; predictions modelled; every metric computed in the browser and matched by an independent Python run, 253 values identical</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">OpenAI API pricing</span><span class="note">gpt-4.1, gpt-5 and gpt-5-mini list prices, and the notice that the fine-tuning platform is winding down; read 2026-11-08, re-verify</span></div>
+      <div class="covered-row"><span class="status pill solid">✓</span><span class="name">Hugging Face Inference Endpoints and Together AI pricing</span><span class="note">GPU hourly prices (L4 $0.80, L40S $1.80, A100 $2.50, H100 $4.50; Together H100 $5.49), Together supervised fine-tuning $0.34 per 1M tokens with a $4.00 minimum; read 2026-11-08, re-verify</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Drift, monitoring and launch gates</span><span class="note">Linked to Learn AI Observability and Learn Agent Launch, not retaught here</span></div>
+      <div class="covered-row"><span class="status pill light">◐</span><span class="name">Larkline, its volume, build cost, retrain cost and latency</span><span class="note">Constructed for teaching; latency fields are inputs for your vendor-reported numbers, not measurements</span></div>
+    </div>
+    <p class="mono" style="margin-top:14px">Every fact on this page, and its verification tier, is recorded in the course's source map.</p>
+  </section>
+
+  <section class="cheat" id="cheatsheet">
+    <h3>Session 6 cheat sheet <span>· pin this</span></h3>
+    <div class="grid-2">
+      <div class="cheat-item"><b>Four numbers</b><span>Accuracy, macro-F1, the urgent queue's recall, the weakest queue. Never the first alone.</span></div>
+      <div class="cheat-item"><b>Sloped against flat</b><span>API cost rises with volume; a hosted tune is close to flat. Break-even is the crossing.</span></div>
+      <div class="cheat-item"><b>The rule is AND</b><span>GO only if the tune clears the floor and costs less. Cheapest-wins drops the floor.</span></div>
+      <div class="cheat-item"><b>Price the people</b><span>Training compute is small. Hosting, build and retrain time decide the flat line.</span></div>
+      <div class="cheat-item"><b>Price the smaller API</b><span>A cheaper API tier is often the rival nobody tested.</span></div>
+      <div class="cheat-item"><b>Memo line 4</b><span>Name the number that would flip the decision, both ways.</span></div>
+    </div>
+  </section>
+
+  <div class="callout next">
+    <span class="nx-pill">Next session</span>
+    <p>That is the path. Go back to session 1 with your own task and run the six-line scorecard again: if the first HOLD has moved, the next rung is in reach. For the eval machinery behind session 5, Learn AI Evals is next door on the shelf.</p>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Session 6 of 6 · learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span><a href="05-evals-before-and-after.html">← Prev: Evals before and after the tune</a> &nbsp;·&nbsp; <a href="../index.html">Course home</a></span>
+  </footer>
+
+</main>
+
+<script src="../assets/ftn-sample.js?v=1"></script>
+<script src="../assets/ftn-live.js?v=3"></script>
+<script src="../assets/app.js?v=1"></script>
+</body>
+</html>

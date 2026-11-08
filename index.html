@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- social:start -->
+<meta name="description" content="Where the AI shelf stops: when a smaller tuned model beats the big general one, and how to prove it with evals. Six sessions for builders: the prompt, RAG or fine-tune ladder, small language models, the training set, LoRA and QLoRA, evals before and after, and a break-even bench on 600 real customer messages. Free, by Phoebe Fu.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Learn with Phoebe">
+<meta property="og:title" content="Learn Fine-tuning and Small Language Models with Phoebe">
+<meta property="og:description" content="When a smaller tuned model beats the big general one, and how to prove it with evals. Six sessions and a break-even bench computed in your browser.">
+<meta property="og:url" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/">
+<meta property="og:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Learn Fine-tuning and Small Language Models with Phoebe">
+<meta name="twitter:description" content="Prompt, RAG or fine-tune? Score the arms on 600 real rows and find the break-even volume in your browser.">
+<meta name="twitter:image" content="https://phoebefu6.github.io/learn-fine-tuning-slm-with-phoebe/assets/og-cover.png">
+<!-- social:end -->
+<title>Learn Fine-tuning and Small Language Models with Phoebe</title>
+<link rel="stylesheet" href="assets/style.css?v=2">
+<style>
+
+  .stats-row { display: flex; gap: 2.4rem; margin-top: 1.5rem; flex-wrap: wrap; }
+  .stat b { display: block; font-size: 2.1rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: .72rem; opacity: 1; text-transform: uppercase; letter-spacing: .09em; font-weight: 600; }
+
+  .course-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .course-card {
+    border: 1px solid var(--hairline);
+    border-top: 4px solid var(--diff, var(--indigo));
+    border-radius: var(--radius);
+    padding: 1.2rem 1.3rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--ink);
+    background: #fff;
+    transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+    position: relative;
+  }
+  .course-card:hover { border-color: var(--indigo-soft); border-top-color: var(--diff, var(--indigo)); box-shadow: 0 8px 28px rgba(var(--shadow-rgb),.16); transform: translateY(-3px); }
+  .course-card .cicon { font-size: 1.7rem; line-height: 1; }
+  .course-card .cnum { font-size: .72rem; font-weight: 700; color: var(--indigo); text-transform: uppercase; letter-spacing: .1em; }
+  .course-card h3 { font-size: 1.05rem; font-weight: 800; line-height: 1.3; }
+  .course-card p { font-size: .85rem; color: var(--muted); flex: 1; }
+  .course-card .meta { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+  .diff-legend { display: flex; gap: 1rem; margin-top: 1.6rem; font-size: .74rem; color: var(--muted); font-weight: 600; flex-wrap: wrap; }
+  .diff-legend i { display: inline-block; width: .85rem; height: .35rem; border-radius: 999px; margin-right: .35rem; vertical-align: middle; }
+
+  .paths { margin-top: 2.6rem; }
+  .paths h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .3rem; }
+  .paths .plede { color: var(--muted); font-size: .92rem; margin-bottom: .8rem; }
+  .path { display: flex; gap: .55rem; align-items: center; padding: .75rem 0; border-bottom: .5px solid var(--hairline); flex-wrap: wrap; }
+  .path:last-child { border-bottom: none; }
+  .path b { min-width: 15.5rem; font-size: .9rem; }
+  .path .pstep { background: var(--indigo-50); color: var(--indigo-deep); border-radius: 999px; padding: .16rem .68rem; font-weight: 700; font-size: .8rem; text-decoration: none; transition: all .12s ease; }
+  .path .pstep:hover { background: var(--indigo); color: #fff; }
+  .path .parr { color: var(--muted); font-weight: 700; }
+
+  .mm-section { margin-top: 1.6rem; }
+  .mm-section h2 { font-size: 1.3rem; font-weight: 800; margin-bottom: .2rem; }
+  .mm-section .mm-lede { color: var(--muted); font-size: .92rem; margin-bottom: .4rem; }
+  .mm-wrap { border: 1px solid var(--hairline); border-radius: var(--radius); background: linear-gradient(180deg,#fff,var(--indigo-50)); padding: .6rem; overflow-x: auto; }
+  .mm-svg { width: 100%; height: auto; display: block; max-width: 60rem; margin: 0 auto; min-width: 34rem; }
+  .mm-link { cursor: pointer; text-decoration: none; }
+  .mm-node rect { transition: opacity .15s ease, filter .15s ease; }
+  .mm-node text { pointer-events: none; }
+  .mm-link:hover .mm-node rect { filter: brightness(1.06); }
+  .mm-edge { transition: opacity .15s ease; }
+
+  .not-this { border: 1px solid var(--hairline); border-left: 4px solid var(--clay); border-radius: var(--radius); background: #fff; padding: 1.1rem 1.3rem; margin-top: 1.2rem; }
+  .not-this h3 { font-size: .95rem; font-weight: 800; margin-bottom: .5rem; }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="wrap">
+    <div class="eyebrow">Learn with Phoebe · AI</div>
+    <h1>Learn <span class="accent">Fine-tuning and Small Language Models</span> with Phoebe</h1>
+    <p class="sub">Where the AI shelf stops: when a smaller tuned model beats the big general one, and how to prove it with evals. Six sessions for builders who already prompt and maybe run RAG, and have just been asked "should we fine-tune, or go smaller?". What a fine-tune changes and what it does not, three real small-model cards, the training set, LoRA and QLoRA without the maths fear, evals before and after the tune, and a break-even bench on 600 real customer messages that prints a go or a no-go.</p>
+    <div class="stats-row">
+      <div class="stat"><b data-count="6">6</b><span>sessions</span></div>
+      <div class="stat"><b data-count="600">600</b><span>real messages on the bench</span></div>
+      <div class="stat"><b data-count="3">3</b><span>model arms scored</span></div>
+      <div class="stat"><b data-count="797304">797,304</b><span>requests a month to break even</span></div>
+      <div class="stat"><b data-count="45">45</b><span>min per session</span></div>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>The six sessions 🧭 <span style="font-size:.85rem;font-weight:600;color:var(--muted)">· from "should we?" to a signed decision memo</span></h2>
+      <p class="plede">The running case is <strong>Larkline, a constructed mid-size insurer</strong>. Its claims desk routes about 900,000 messages a month to six queues, one of them urgent, with a prompt on a big general API model. It is slow at peak and costly at volume. Priya, its ML engineer, has to answer one question: should Larkline fine-tune a small model instead? Larkline and everyone in it are invented for teaching, and every page says so.</p>
+    </div>
+    <div class="course-grid">
+      <a class="course-card" href="courses/01-the-decision-ladder.html" style="--diff:#34D399">
+        <span class="cicon">🪜</span>
+        <span class="cnum">Session 1 · foundations</span>
+        <h3>Prompt, RAG or fine-tune? The decision ladder</h3>
+        <p>What a fine-tune changes and what it does not, the five rungs from prompt to distillation, the three questions before rung four, and Larkline's task scored line by line.</p>
+        <span class="meta"><span class="pill amber">▶ Start here</span></span>
+      </a>
+      <a class="course-card" href="courses/02-small-models-trade-offs.html" style="--diff:#FBBF24">
+        <span class="cicon">🔬</span>
+        <span class="cnum">Session 2 · core</span>
+        <h3>Small language models: what you give up, what you get back</h3>
+        <p>Parameters, context, licences, quantisation and latency, read from three real model cards: Llama 3.2 3B, Qwen3-4B and Phi-4-mini.</p>
+        <span class="meta"><span class="pill">three model cards</span></span>
+      </a>
+      <a class="course-card" href="courses/03-building-the-training-set.html" style="--diff:#FBBF24">
+        <span class="cicon">🧪</span>
+        <span class="cnum">Session 3 · core</span>
+        <h3>The training set: where a tune is won or lost</h3>
+        <p>Chat-format examples, label quality, leakage and duplicates found in a real public dataset, the split, and the open argument about how many examples you need.</p>
+        <span class="meta"><span class="pill">clean and split</span></span>
+      </a>
+      <a class="course-card" href="courses/04-lora-and-qlora.html" style="--diff:#FB923C">
+        <span class="cicon">🧩</span>
+        <span class="cnum">Session 4 · deeper</span>
+        <h3>LoRA and QLoRA without the maths fear</h3>
+        <p>Full fine-tune against a low-rank adapter, rank and alpha, which layers, a 4-bit base, and a GPU memory estimate from a real LoRA config.</p>
+        <span class="meta"><span class="pill">read a config</span></span>
+      </a>
+      <a class="course-card" href="courses/05-evals-before-and-after.html" style="--diff:#FB923C">
+        <span class="cicon">📏</span>
+        <span class="cnum">Session 5 · deeper</span>
+        <h3>Evals before and after the tune</h3>
+        <p>A held-out set, the big-model baseline, per-queue recall and the confusion matrix, catastrophic forgetting and the regression set that guards against it.</p>
+        <span class="meta"><span class="pill">baseline first</span></span>
+      </a>
+      <a class="course-card" href="courses/06-the-break-even-bench.html" style="--diff:#F87171">
+        <span class="cicon">⚖️</span>
+        <span class="cnum">Session 6 · bench night</span>
+        <h3>The break-even bench: cost, serving and drift</h3>
+        <p>Score three arms on 600 real messages, find the volume where a tuned small model pays, watch cheapest-wins print a GO the floor refuses, and price a monthly retrain.</p>
+        <span class="meta"><span class="pill amber">★ the bench</span></span>
+      </a>
+    </div>
+    <div class="diff-legend">
+      <span><i style="background:#34D399"></i>foundations</span>
+      <span><i style="background:#FBBF24"></i>core</span>
+      <span><i style="background:#FB923C"></i>deeper</span>
+      <span><i style="background:#F87171"></i>bench night</span>
+    </div>
+  </section>
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>Your passport 🎫</h2>
+      <p class="plede">Clear all three quiz questions in a session and it gets stamped. Six stamps means you can place a request on the ladder, read a small model's card, build a clean training set, read a LoRA config, prove a tune with an eval, and write a go/no-go memo with its break-even. Stamps live in this browser only.</p>
+    </div>
+    <div class="pp-strip"></div>
+  </section>
+  <section class="section">
+    <div class="not-this">
+      <h3>What this is not, so you land in the right place 🧭</h3>
+      <table class="clean">
+        <tr><th>If your question is</th><th>Go here instead</th></tr>
+        <tr><td>How do I give a model our documents so it answers from them?</td><td><a href="https://phoebefu6.github.io/learn-rag-with-phoebe/">Learn RAG ↗</a></td></tr>
+        <tr><td>How do I write better prompts and few-shot examples?</td><td><a href="https://phoebefu6.github.io/learn-prompt-engineering-with-phoebe/">Learn Prompt Engineering ↗</a></td></tr>
+        <tr><td>How do I build golden sets, LLM-as-judge and regression suites?</td><td><a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/">Learn AI Evals ↗</a></td></tr>
+        <tr><td>How do I watch a model in production and catch drift?</td><td><a href="https://phoebefu6.github.io/learn-ai-observability-with-phoebe/">Learn AI Observability ↗</a></td></tr>
+        <tr><td>I want to fine-tune Hermes on my own laptop, step by step.</td><td><a href="https://phoebefu6.github.io/learn-hermes-ai-with-phoebe/courses/94-fine-tune-your-own.html">Learn Hermes AI, fine-tune your own ↗</a></td></tr>
+        <tr><td><strong>Someone asked "should we fine-tune, or go smaller?" and I need to answer with evidence.</strong></td><td><strong>you are in the right place</strong></td></tr>
+      </table>
+      <p style="margin-top:.7rem;font-size:.86rem;color:var(--muted)"><strong>The decision, the data, the adapter and the proof.</strong> Retrieval, prompting, eval tooling and production monitoring are taught next door and linked from here rather than repeated.</p>
+    </div>
+  </section>
+  <section class="section">
+    <div class="paths">
+      <h2>Choose your path 🗺️</h2>
+      <p class="plede">Three doors into the same habit: the eval decides, not the hype.</p>
+      <div class="path"><b>📨 I was asked "should we tune?" this week</b>
+        <a class="pstep" href="courses/01-the-decision-ladder.html">1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/05-evals-before-and-after.html">5</a><span class="parr">→</span>
+        <a class="pstep" href="courses/06-the-break-even-bench.html">6</a>
+        <span style="font-size:.82rem;color:var(--muted)">place it on the ladder, prove it, price it</span>
+      </div>
+      <div class="path"><b>🛠️ I am about to run a tune</b>
+        <a class="pstep" href="courses/02-small-models-trade-offs.html">2</a><span class="parr">→</span>
+        <a class="pstep" href="courses/03-building-the-training-set.html">3</a><span class="parr">→</span>
+        <a class="pstep" href="courses/04-lora-and-qlora.html">4</a>
+        <span style="font-size:.82rem;color:var(--muted)">pick the model, build the data, read the config</span>
+      </div>
+      <div class="path"><b>🧭 The whole path</b>
+        <a class="pstep" href="courses/01-the-decision-ladder.html">1</a><span class="parr">→</span>
+        <a class="pstep" href="courses/02-small-models-trade-offs.html">2</a><span class="parr">→</span>
+        <a class="pstep" href="courses/03-building-the-training-set.html">3</a><span class="parr">→</span>
+        <a class="pstep" href="courses/04-lora-and-qlora.html">4</a><span class="parr">→</span>
+        <a class="pstep" href="courses/05-evals-before-and-after.html">5</a><span class="parr">→</span>
+        <a class="pstep" href="courses/06-the-break-even-bench.html">6</a>
+        <span style="font-size:.82rem;color:var(--muted)">from the question to the signed memo</span>
+      </div>
+    </div>
+  </section>
+  <section class="section">
+    <div class="paths" style="margin-top:0">
+      <h2>What is honest here 🧾</h2>
+      <p class="plede">Fine-tuning travels with famous claims, and several are true only in the setting they came from. Each claim on these pages carries its status.</p>
+    </div>
+    <table class="clean">
+      <tr><th>Claim</th><th>Status</th></tr>
+      <tr><td>Accuracy, macro-F1, per-queue recall and the confusion matrix on the bench</td><td><strong>Really computed</strong> in your browser from 600 real Banking77 messages (PolyAI, CC BY 4.0) and checked against an independent Python run</td></tr>
+      <tr><td>Which queue each model arm routed each message to</td><td><strong>Modelled</strong> by a seeded rule printed with the data, because no model runs in a browser; labelled on every number</td></tr>
+      <tr><td>API, GPU and training prices</td><td><strong>Vendor list prices</strong> read on 2026-11-08; they change often, so re-verify</td></tr>
+      <tr><td>"Fine-tuning teaches the model new facts"</td><td><strong>Contested.</strong> Retrieval beat fine-tuning for knowledge in a 2023 comparison, and new facts raised hallucination in a 2024 study; session 1 teaches both sides</td></tr>
+      <tr><td>"You only need 50 to 100 examples"</td><td><strong>One vendor's guidance</strong> (OpenAI), set beside 1,000 curated examples (LIMA) and "thousands"; session 3 teaches the disagreement</td></tr>
+      <tr><td>"A tuned 7B model beats GPT-4"</td><td><strong>An average over 31 tasks</strong> in one report (LoRA Land), not a general law</td></tr>
+      <tr><td>Larkline, its volume, build cost and every Larkline number</td><td><strong>Constructed,</strong> for teaching</td></tr>
+    </table>
+  </section>
+  <section class="section mm-section">
+    <h2>The knowledge map 🧠</h2>
+    <p class="mm-lede">The whole path at a glance - hover a session to spotlight its concepts, click any node to jump in.</p>
+    <div class="mm-wrap"><div id="mindmap"></div></div>
+  </section>
+  <footer class="pagefoot">
+    <span>learn-fine-tuning-slm-with-phoebe · by Phoebe Fu &nbsp;·&nbsp; 📚 <a href="https://phoebefu6.github.io/learn-with-phoebe/">Learn with Phoebe ↗</a></span>
+    <span>Neighbours on the shelf: <a href="https://phoebefu6.github.io/learn-rag-with-phoebe/">RAG ↗</a> &nbsp;·&nbsp; <a href="https://phoebefu6.github.io/learn-ai-evals-with-phoebe/">AI Evals ↗</a> &nbsp;·&nbsp; <a href="https://phoebefu6.github.io/learn-prompt-engineering-with-phoebe/">Prompt Engineering ↗</a></span>
+  </footer>
+</main>
+<script>
+window.MINDMAP_DATA = {
+ "title": "Fine-tuning\n+ small models",
+ "centerColor": "#3F3C06",
+ "sessions": [
+  {
+   "label": "Prompt, RAG or\nfine-tune?",
+   "href": "courses/01-the-decision-ladder.html",
+   "color": "#34D399",
+   "concepts": [
+    {
+     "label": "Behaviour, not facts",
+     "href": "courses/01-the-decision-ladder.html"
+    },
+    {
+     "label": "The five-rung ladder",
+     "href": "courses/01-the-decision-ladder.html"
+    },
+    {
+     "label": "Eval before the tune",
+     "href": "courses/01-the-decision-ladder.html"
+    }
+   ]
+  },
+  {
+   "label": "Small language\nmodels",
+   "href": "courses/02-small-models-trade-offs.html",
+   "color": "#FBBF24",
+   "concepts": [
+    {
+     "label": "Read the model card",
+     "href": "courses/02-small-models-trade-offs.html"
+    },
+    {
+     "label": "Open weights vs licence",
+     "href": "courses/02-small-models-trade-offs.html"
+    },
+    {
+     "label": "Bytes per parameter",
+     "href": "courses/02-small-models-trade-offs.html"
+    }
+   ]
+  },
+  {
+   "label": "The training\nset",
+   "href": "courses/03-building-the-training-set.html",
+   "color": "#FBBF24",
+   "concepts": [
+    {
+     "label": "Chat-format examples",
+     "href": "courses/03-building-the-training-set.html"
+    },
+    {
+     "label": "Leakage and duplicates",
+     "href": "courses/03-building-the-training-set.html"
+    },
+    {
+     "label": "How many examples?",
+     "href": "courses/03-building-the-training-set.html"
+    }
+   ]
+  },
+  {
+   "label": "LoRA and\nQLoRA",
+   "href": "courses/04-lora-and-qlora.html",
+   "color": "#FB923C",
+   "concepts": [
+    {
+     "label": "Frozen W plus B times A",
+     "href": "courses/04-lora-and-qlora.html"
+    },
+    {
+     "label": "Rank, alpha, targets",
+     "href": "courses/04-lora-and-qlora.html"
+    },
+    {
+     "label": "4-bit base, GPU memory",
+     "href": "courses/04-lora-and-qlora.html"
+    }
+   ]
+  },
+  {
+   "label": "Evals before\nand after",
+   "href": "courses/05-evals-before-and-after.html",
+   "color": "#FB923C",
+   "concepts": [
+    {
+     "label": "Baseline first",
+     "href": "courses/05-evals-before-and-after.html"
+    },
+    {
+     "label": "Per-queue recall",
+     "href": "courses/05-evals-before-and-after.html"
+    },
+    {
+     "label": "Forgetting, regression",
+     "href": "courses/05-evals-before-and-after.html"
+    }
+   ]
+  },
+  {
+   "label": "The break-even\nbench",
+   "href": "courses/06-the-break-even-bench.html",
+   "color": "#F87171",
+   "concepts": [
+    {
+     "label": "Sloped against flat",
+     "href": "courses/06-the-break-even-bench.html"
+    },
+    {
+     "label": "Cheapest wins: anti",
+     "href": "courses/06-the-break-even-bench.html"
+    },
+    {
+     "label": "Retrain every month",
+     "href": "courses/06-the-break-even-bench.html"
+    }
+   ]
+  }
+ ]
+};
+</script>
+<script src="assets/mindmap.js?v=1"></script>
+<script src="assets/app.js?v=1"></script>
+</body>
+</html>
